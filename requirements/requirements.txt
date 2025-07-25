@@ -1,0 +1,84 @@
+# Core LangChain and LangGraph
+langchain
+langchain-core
+langchain-openai
+langgraph
+
+# OpenAI API
+openai
+
+# Environment management
+python-dotenv
+
+# Data handling
+pydantic
+pydantic-settings
+
+# Async support
+asyncio-mqtt
+aiofiles
+
+# Database connections
+# Neo4j for knowledge graph
+neo4j
+
+# Redis for state management
+redis
+redis-py-cluster
+
+# Vector database (ChromaDB)
+chromadb
+
+# Message broker (Kafka)
+kafka-python
+aiokafka
+
+# Web framework (FastAPI)
+fastapi
+uvicorn
+starlette
+
+# HTTP client
+httpx
+requests
+
+# Data processing
+pandas
+numpy
+
+# NLP and text processing
+nltk
+spacy
+textblob
+
+# Telegram integration (for testing)
+python-telegram-bot
+telethon
+
+# Email processing
+imaplib2
+email-validator
+
+# Monitoring and logging
+# prometheus-client
+# structlog
+
+# Security
+# cryptography
+# passlib
+# python-jose
+
+# Testing
+pytest
+pytest-asyncio
+pytest-mock
+
+# Development tools
+# black
+# flake8
+# mypy
+# pre-commit
+
+# Utilities
+python-dateutil
+pytz
