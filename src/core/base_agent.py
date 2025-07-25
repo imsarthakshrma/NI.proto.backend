@@ -5,19 +5,21 @@ Base Agent Implementation for Native Intelligence
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from re import L
+# from re import L
 from typing import Dict, Any, List, Optional, TypedDict, Annotated
 from datetime import datetime
-from uuid import uuid4
+import uuid
 from dataclasses import field
-
+from dotenv import load_dotenv
+load_dotenv()
 
 
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+# from langgraph.prebuilt import ToolNode
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
+
 # from llama_index import OpenAI
 
 class AgentStatus (Enum):
@@ -59,10 +61,18 @@ class Desire:
     deadline: Optional[datetime] = None
     
     def is_achievable(self, beliefs: List[Belief]) -> bool:
-        """Check if desire can be achieved given current beliefs"""
-        # beliefs = [belief for belief in beliefs if belief.is_valid()]
-        # basic implementation - can be overridden by specific agents
-        return True
+        """Check if desire can be achieved given current beliefs
+        
+        Args:
+            beliefs (List[Belief]): List of current beliefs
+        
+        Returns:
+            bool: True if desire can be achieved, False otherwise
+        """
+        # Default implementation - can be overridden by specific agents
+        # Check if we have any valid beliefs to work with
+        valid_beliefs = [belief for belief in beliefs if belief.is_valid()]
+        return len(valid_beliefs) > 0
 
 
 @dataclass
@@ -292,12 +302,7 @@ class BaseAgent(ABC):
             "intentions_count": len([i for i in self.intentions if i.status == "pending"]),
             "result": result
         }
-    
-    def perceive(self, messages: List[BaseMessage], context: Dict[str, Any]) -> List[Belief]:
-        """Perception phase - update beliefs based on input"""
-        raise NotImplementedError
 
-    
     # abstract methods to be implemented by specific agents
     @abstractmethod
     async def perceive(
