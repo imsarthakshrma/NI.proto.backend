@@ -77,9 +77,6 @@ class ObserverAgent(BaseAgent):
 
         # initialize last activity
         self.last_activity = datetime.now()
-
-        # initialize graph
-        self._initialize_graph()
     
     def _initialize_goals(self):
         """
@@ -520,7 +517,7 @@ class ObserverAgent(BaseAgent):
         
         return emails + names
     
-    def _is_templatable_response(self, content: str) -> bool:
+    def _is_templatable_response(self, content: str, context: Dict[str, Any]) -> bool:
         """Check if response can be turned into a template"""
         template_indicators = [
             "thank you for", "we will", "please find", "as requested",

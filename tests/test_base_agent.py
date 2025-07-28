@@ -108,7 +108,7 @@ async def test_basic_functionality():
         test_input = {"message": "Hello, this is a test observation"}
         result = await agent.process(test_input, {"test": True})
         
-        print(f"Processing completed")
+        print("Processing completed")
         print(f"Final status: {agent.get_status()}")
         print(f"Result: {result}")
         
