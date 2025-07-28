@@ -52,20 +52,6 @@ class TelegramAuthHandler:
             return set()
     
     def _load_admin_users(self) -> Set[int]:
-        
-        admin_env = os.getenv("TELEGRAM_ADMIN_USERS", "")
-
-        if not admin_env:
-            return set()
-
-        try:
-            admin_ids = [int(admin_id.strip()) for admin_id in admin_env.split(",") if admin_id.strip()]
-            return set(admin_ids)
-        except ValueError as e:
-            logger.error(f"Error parsing TELEGRAM_ADMIN_USERS: {e}")
-            return set()
-    
-    def _load_admin_users(self) -> Set[int]:
 
         admins_env = os.getenv("TELEGRAM_ADMIN_USERS", "")
         
@@ -98,6 +84,9 @@ class TelegramAuthHandler:
                 logger.info(f"Authorized user {user.first_name} ({user.id}) granted access")
                 return True
             
+            # explicit development mode check
+            dev_mode = os.getenv("TELEGRAM_DEV_MODE", "false").lower() == "true"
+
             # check if chat is in authorized groups
             if self.authorized_groups:
                 if chat.id in self.authorized_groups:
@@ -108,13 +97,17 @@ class TelegramAuthHandler:
                     return False
             
             # if no specific authorization configured, allow all (development mode)
-            if not self.authorized_groups and not self.authorized_users:
+            if dev_mode and not self.authorized_groups and not self.authorized_users:
                 logger.info(f"Development mode - allowing access from {user.first_name}")
                 return True
             
+            elif not self.authorized_groups and not self.authorized_users:
+                logger.warning("No authorization configured and dev mode disabled - denying access")
+                return False
+            
             logger.warning(f"Unauthorized access attempt from {user.first_name} ({user.id}) in {chat.title}")
             return False
-            
+        
         except Exception as e:
             logger.error(f"Error checking authorization : {e}")
             return False

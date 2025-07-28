@@ -92,7 +92,7 @@ class ObserverAgentTest:
                 # Test individual analysis methods
                 comm_belief = await observer._analyze_communication(message, context)
                 if comm_belief:
-                    print(f"Communication analysis successful")
+                    print("Communication analysis successful")
                     print(f"  Tone: {comm_belief.content.get('tone')}")
                     print(f"  Urgency: {comm_belief.content.get('urgency')}")
                     print(f"  Topics: {comm_belief.content.get('topics')}")
@@ -325,33 +325,33 @@ class ObserverAgentTest:
                 }
             }
             
-            print(f"Processing business scenario:")
+            print("Processing business scenario:")
             print(f"Message: {test_input['message']}")
             print(f"Context: {test_input['context']}")
             
             initial_status = observer.get_status()
-            print(f"\nInitial agent status:")
+            print("\nInitial agent status:")
             for key, value in initial_status.items():
                 print(f"  {key}: {value}")
             
             # Run full BDI cycle
             result = await observer.process(test_input, test_input["context"])
             
-            print(f"\nBDI cycle completed successfully")
-            print(f"Processing result:")
+            print("\nBDI cycle completed successfully")
+            print("Processing result:")
             for key, value in result.items():
                 if key != "result":  # Don't print the full result object
                     print(f"  {key}: {value}")
             
             final_status = observer.get_status()
-            print(f"\nFinal agent status:")
+            print("\nFinal agent status:")
             for key, value in final_status.items():
                 print(f"  {key}: {value}")
             
             # Get intelligence summary
             if hasattr(observer, 'get_intelligence_summary'):
                 summary = observer.get_intelligence_summary()
-                print(f"\nIntelligence summary:")
+                print("\nIntelligence summary:")
                 for key, value in summary.items():
                     print(f"  {key}: {value}")
                 
@@ -469,14 +469,14 @@ async def main():
     print("=" * 60)
     
     # Final comprehensive summary
-    print(f"Final Observer Agent Summary:")
+    print("Final Observer Agent Summary:")
     final_status = observer.get_status()
     for key, value in final_status.items():
         print(f"  {key}: {value}")
     
     if hasattr(observer, 'get_intelligence_summary'):
         intelligence_summary = observer.get_intelligence_summary()
-        print(f"\nFinal Intelligence Summary:")
+        print("\nFinal Intelligence Summary:")
         for key, value in intelligence_summary.items():
             print(f"  {key}: {value}")
 

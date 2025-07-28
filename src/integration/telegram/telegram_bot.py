@@ -5,9 +5,9 @@ Telegram bot Integration for Dela AI
 import os
 import asyncio
 import logging
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from telegram import Update, Bot
+# from datetime import datetime
+# from typing import Dict, Any, List, Optional
+from telegram import Update
 from telegram.ext import Application, MessageHandler, CommandHandler, ContextTypes, filters
 import os
 from dotenv import load_dotenv
@@ -80,12 +80,17 @@ class DelaBot:
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+        """Handle /status command"""
         try:
+            # fix: Use effective_message as fallback
+            message = update.message or update.effective_message
+            if not message:
+                logger.error("No message object available in status command")
+                return
+            
             status = self.observer_agent.get_status()
             intelligence_summary = self.observer_agent.get_intelligence_summary()
-
-
+            
             status_message = f"""
             **DELA Observer Status**
 
@@ -103,11 +108,17 @@ class DelaBot:
 
             **Intelligence Confidence:** `{intelligence_summary.get('learning_confidence', 0):.2f}`
             """
-
-            await update.message.reply_text(status_message, parse_mode="Markdown")
+            
+            await message.reply_text(status_message, parse_mode='Markdown')
+            
         except Exception as e:
-            logger.error(f"Error in status command: {e}", exc_info=True)
-            await update.message.reply_text("Error fetching status. Please try again later.")
+            logger.error(f"Error in status command: {e}")
+            try:
+                message = update.message or update.effective_message
+                if message:
+                    await message.reply_text("Error retrieving status. Please try again.")
+            except:
+                logger.error("Could not send error message to user")
         
     async def patterns_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /patterns command"""
@@ -130,7 +141,7 @@ class DelaBot:
 
             # Build response
             patterns_message = "**Learned Patterns:**\n\n"
-            for pattern_key, pattern in list(patterns.items())[:10]:
+            for _, pattern in list(patterns.items())[:10]:
                 patterns_message += f"**{pattern.pattern_type}**\n"
                 patterns_message += f"- Confidence: `{pattern.confidence:.2f}`\n"
                 patterns_message += f"- Frequency: `{pattern.frequency}`\n"
@@ -153,13 +164,13 @@ class DelaBot:
                     await message.reply_text("Error retrieving patterns. Please try again.")
                 elif chat_id:
                     await context.bot.send_message(chat_id=chat_id, text="Error retrieving patterns. Please try again.")
-            except:
-                logger.error("Could not send error message to user")
+            except Exception as e:
+                logger.error("Could not send error message to user:0")
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         try:
-            # Fix: Use effective_message as fallback
+            # fix: Use effective_message as fallback
             message = update.message or update.effective_message
             if not message:
                 logger.error("No message object available in help command")
@@ -203,7 +214,7 @@ class DelaBot:
                 message = update.message or update.effective_message
                 if message:
                     await message.reply_text("Error showing help. Please try again.")
-            except:
+            except Exception as e:
                 logger.error("Could not send error message to user")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
