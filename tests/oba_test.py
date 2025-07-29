@@ -6,7 +6,7 @@ Comprehensive test suite for ObserverAgent functionality
 import asyncio
 import os
 from datetime import datetime
-from typing import Dict, Any, List
+# from typing import Dict, Any, List
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -58,7 +58,7 @@ class ObserverAgentTest:
         try:
             observer = ObserverAgent(agent_id="test_observer_001")
             
-            print(f"Agent created successfully")
+            print("Agent created successfully")
             print(f"Agent ID: {observer.agent_id}")
             print(f"Agent Type: {observer.agent_type}")
             print(f"Initial patterns: {len(observer.patterns)}")

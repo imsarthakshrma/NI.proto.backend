@@ -117,7 +117,7 @@ class DelaBot:
                 message = update.message or update.effective_message
                 if message:
                     await message.reply_text("Error retrieving status. Please try again.")
-            except:
+            except Exception as e:
                 logger.error("Could not send error message to user")
         
     async def patterns_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,7 +165,7 @@ class DelaBot:
                 elif chat_id:
                     await context.bot.send_message(chat_id=chat_id, text="Error retrieving patterns. Please try again.")
             except Exception as e:
-                logger.error("Could not send error message to user:0")
+                logger.error("Could not send error message to user")
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         
@@ -253,6 +253,11 @@ class DelaBot:
     async def _send_learning_update(self, update: Update):
 
         try:
+            message = update.message or update.effective_message
+            if not message:
+                logger.error("No message object available in learning update")
+                return
+
             summary = self.observer_agent.get_intelligence_summary()
             
             update_message = f"""
@@ -265,7 +270,7 @@ class DelaBot:
             Use /status for detailed information.
             """
             
-            await update.message.reply_text(update_message)
+            await message.reply_text(update_message, parse_mode='Markdown')
             
         except Exception as e:
             logger.error(f"Error sending learning update: {e}")
