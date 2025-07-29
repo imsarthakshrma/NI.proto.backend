@@ -105,7 +105,6 @@ class AnalyzerAgent(BaseAgent):
 
         updated_desires = []
 
-        
         for desire in self.desires:
             if desire.desire_id == "analyze_patterns":
                 if any(b.belief_type == "communication_analysis" for b in beliefs):
@@ -163,5 +162,197 @@ class AnalyzerAgent(BaseAgent):
         
         return result
 
-    
+    async def learn(self, beliefs: List[Belief], intentions: List[Intention], context: Dict[str, Any]) -> None:
+        """Learn from analysis results"""
+        try:
+            for belief in beliefs:
+                if belief.confidence > self.min_confidence_threshold:
+                    if belief.belief_type == "automation_opportunity":
+                        self._update_automation_confidence(belief)
+            
+            logger.info(f"Analyzer learning completed with {len(beliefs)} beliefs")
+            
+        except Exception as e:
+            logger.error(f"Error in Analyzer learning: {e}", exc_info=True)
+
         
+    async def _analyze_communication_patterns(self, patterns: Dict[str, Any]) -> Optional[Belief]:
+        """Analyze communication patterns from Observer"""
+        try:
+            communication_analysis = {
+                "total_patterns": len(patterns),
+                "high_confidence_patterns": len([p for p in patterns.values() if p.confidence > 0.8]),
+                "communication_styles_identified": 0,
+                "tone_distribution": defaultdict(int)
+            }
+            
+            for pattern in patterns.values():
+                if pattern.pattern_type.startswith("comm_"):
+                    communication_analysis["communication_styles_identified"] += 1
+            
+            return Belief(
+                belief_id=f"comm_analysis_{datetime.now().timestamp()}",
+                belief_type="communication_analysis",
+                content=communication_analysis,
+                confidence=0.8,
+                source="analyzer_agent"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error analyzing communication patterns: {e}")
+            return None
+
+    async def _analyze_automation_opportunities(self, patterns: Dict[str, Any]) -> Optional[Belief]:
+        """Identify automation opportunities"""
+        try:
+            opportunities = []
+            
+            for pattern in patterns.values():
+                if pattern.frequency >= self.min_pattern_frequency and pattern.confidence >= 0.7:
+                    
+                    if pattern.pattern_type.startswith("comm_"):
+                        opportunity = AutomationOpportunity(
+                            opportunity_id=f"template_{len(self.automation_opportunities)}",
+                            opportunity_type="template_response",
+                            description=f"Automate {pattern.pattern_type} responses",
+                            confidence=pattern.confidence,
+                            frequency=pattern.frequency,
+                            potential_time_saved=5,
+                            complexity="low"
+                        )
+                        opportunities.append(opportunity)
+                        self.automation_opportunities[opportunity.opportunity_id] = opportunity
+                    
+                    if "meeting" in pattern.pattern_type or "schedule" in pattern.pattern_type:
+                        opportunity = AutomationOpportunity(
+                            opportunity_id=f"meeting_{len(self.automation_opportunities)}",
+                            opportunity_type="meeting_scheduling",
+                            description=f"Automate meeting scheduling",
+                            confidence=pattern.confidence,
+                            frequency=pattern.frequency,
+                            potential_time_saved=15,
+                            complexity="medium"
+                        )
+                        opportunities.append(opportunity)
+                        self.automation_opportunities[opportunity.opportunity_id] = opportunity
+            
+            return Belief(
+                belief_id=f"automation_opportunities_{datetime.now().timestamp()}",
+                belief_type="automation_opportunity",
+                content={"opportunities_found": len(opportunities), "opportunities": opportunities},
+                confidence=0.8,
+                source="analyzer_agent"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error analyzing automation opportunities: {e}")
+            return None
+
+    async def _analyze_relationships(self, relationships: Dict[str, Any]) -> Optional[Belief]:
+        """Analyze relationships from Observer"""
+        try:
+            if not relationships:
+                return None
+        
+            relationship_types = defaultdict(int)
+            high_confidence_count = 0
+
+            for rel in relationships.values():
+                if getattr(rel, "confidence", 0) > 0.8:
+                    high_confidence_count += 1
+                r_type = getattr(rel, "relationship_type", "unknown")
+                relationship_types[r_type] += 1
+        
+            relationship_analysis = {
+                "total_relationships": len(relationships),
+                "high_confidence_relationships": high_confidence_count,
+                "relationship_types": dict(relationship_types)
+            }
+
+            # confidence metric could be ratio of high confidence
+            computed_confidence = high_confidence_count / max(len(relationships), 1)
+
+            return Belief(
+                belief_id=f"relationship_analysis_{datetime.now().timestamp()}",
+                belief_type="relationship_analysis",
+                content=relationship_analysis,
+                confidence=computed_confidence,
+                source="analyzer_agent"
+            )
+
+        except Exception as e:
+            logger.error(f"Error analyzing relationships: {e}")
+            return None
+
+    async def _execute_pattern_analysis(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute pattern analysis"""
+        beliefs = parameters.get("beliefs", [])
+        
+        analysis_results = {
+            "patterns_analyzed": len(beliefs),
+            "insights_generated": 0,
+            "automation_opportunities": 0
+        }
+        
+        for belief in beliefs:
+            if belief.belief_type == "communication_analysis":
+                analysis_results["insights_generated"] += 1
+                
+                insight = BusinessInsight(
+                    insight_id=f"comm_insight_{len(self.business_insights)}",
+                    insight_type="communication_pattern",
+                    title="Communication Pattern Analysis",
+                    description=f"Analyzed {belief.content.get('total_patterns', 0)} patterns",
+                    confidence=belief.confidence,
+                    impact="medium",
+                    data_points=belief.content.get('total_patterns', 0)
+                )
+                self.business_insights[insight.insight_id] = insight
+        
+        return analysis_results
+    
+    async def _execute_automation_identification(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute automation opportunity identification"""
+        return {
+            "opportunities_identified": len(self.automation_opportunities),
+            "high_priority_opportunities": len([
+                opp for opp in self.automation_opportunities.values() if opp.confidence > 0.8
+            ]),
+            "potential_time_savings": sum([
+                opp.potential_time_saved * opp.frequency 
+                for opp in self.automation_opportunities.values()
+            ])
+        }
+    
+    def _update_automation_confidence(self, belief: Belief):
+        """Update automation opportunity confidence"""
+        opportunities = belief.content.get("opportunities", [])
+        for opp in opportunities:
+            if opp.opportunity_id in self.automation_opportunities:
+                self.automation_opportunities[opp.opportunity_id].confidence = min(
+                    self.automation_opportunities[opp.opportunity_id].confidence + 0.1, 1.0
+                )
+    
+    def get_analysis_summary(self) -> Dict[str, Any]:
+        """Get analysis summary for reporting"""
+        return {
+            "automation_opportunities": len(self.automation_opportunities),
+            "business_insights": len(self.business_insights),
+            "communication_styles": len(self.communication_styles),
+            "high_confidence_opportunities": len([
+                opp for opp in self.automation_opportunities.values() 
+                if opp.confidence > 0.8
+            ]),
+            "total_time_savings_potential": sum([
+                opp.potential_time_saved * opp.frequency 
+                for opp in self.automation_opportunities.values()
+            ])
+        }
+    
+    def get_top_automation_opportunities(self, limit: int = 10) -> List[AutomationOpportunity]:
+        """Get top automation opportunities"""
+        return sorted(
+            self.automation_opportunities.values(),
+            key=lambda x: (x.confidence * x.frequency * x.potential_time_saved),
+            reverse=True
+        )[:limit]
