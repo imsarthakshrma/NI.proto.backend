@@ -6,10 +6,11 @@ Handles calendar operations and meeting scheduling
 import os
 import logging
 from datetime import datetime, timedelta
-from this import d
+# from this import d
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from langchain.tools import BaseTool
+from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 import json
 
@@ -218,6 +219,7 @@ class GoogleCalendarService:
                 if day_start.weekday() >= 5: # skip weekends
                     continue
 
+                slot_start = day_start
                 while slot_start + timedelta(minutes=duration_minutes) <= day_end:
                     slot_end = slot_start + timedelta(minutes=duration_minutes)
 
@@ -291,4 +293,160 @@ calendar_service = GoogleCalendarService()
 
 @tool("schedule_meeting", args_schema=ScheduleMeetingInput)
 
-async 
+async def schedule_meeting(
+    title: str,
+    start_time: str,
+    duration_minutes: int = 60,
+    attendees: List[str] = None,
+    description: str = "",
+    location: str = ""
+) -> str:
+    """
+    Schedule a meeting on Google Calendar.
+    
+    Args:
+        title: Meeting title
+        start_time: Start time in ISO format (YYYY-MM-DDTHH:MM:SS)
+        duration_minutes: Meeting duration in minutes
+        attendees: List of attendee email addresses
+        description: Meeting description
+        location: Meeting location
+    
+    Returns:
+        String with meeting creation status and details
+    """
+
+    try:
+        if not attendees:
+            attendees = []
+
+        # parse start time
+        start_dt = datetime.fromisoformat(start_time)
+        end_dt = start_dt + timedelta(minutes=duration_minutes)
+
+        
+        meeting = MeetingDetails(
+            title=title,
+            start_time=start_dt,
+            end_time=end_dt,
+            attendees=attendees,
+            description=description,
+            location=location
+        )
+        
+        
+        result = await calendar_service.create_meeting(meeting)
+
+        if result:
+            return f"Meeting `{title}` scheduled successfully for {start_time}. Event ID: {result['event_id']}."
+        else:
+            return f"Failed to schedule meeting for {title} on {start_time}."
+    except Exception as e:
+        logger.error(f"Error in schedule_meeting tool: {e}")
+        return f"Error scheduling meeting: {str(e)}"
+
+@tool("find_free_slots", args_schema=FindFreeSlotsInput)
+async def find_free_slots(
+    duration_minutes: int = 60,
+    days_ahead: int = 7,
+    preferred_times: Optional[List[str]] = None
+) -> str:
+    """
+    Find available time slots in the calendar.
+    
+    Args:
+        duration_minutes: Required meeting duration in minutes
+        days_ahead: Number of days to look ahead
+        preferred_times: Preferred time slots (morning, afternoon, evening)
+    
+    Returns:
+        String with available time slots
+    """
+    try:
+        slots = await calendar_service.find_free_slots(duration_minutes, days_ahead)
+        
+        if not slots:
+            return f"No free slots found for {duration_minutes} minutes in the next {days_ahead} days"
+        
+        slot_list = []
+        for i, slot in enumerate(slots[:5]):  # show top 5 slots
+            slot_list.append(
+                f"{i+1}. {slot.start_time.strftime('%Y-%m-%d %H:%M')} - {slot.end_time.strftime('%H:%M')}"
+            )
+        
+        if preferred_times:
+            preferred_slots = []
+            time_ranges = {
+                'morning': (6, 12),
+                'afternoon': (12, 18),
+                'evening': (18, 22)
+            }
+            for slot in slots:
+                hour = slot.start_time.hour
+                for time_pref in preferred_times:
+                    key = time_pref.lower()
+                    if key in time_ranges:
+                        start_hour, end_hour = time_ranges[key]
+                        if start_hour <= hour < end_hour:
+                            preferred_slots.append(slot)
+                            break
+
+            if preferred_slots:
+                slot_list = []
+                for i, slot in enumerate(preferred_slots[:5]):
+                    slot_list.append(
+                        f"{i+1}. {slot.start_time.strftime('%Y-%m-%d %H:%M')} - {slot.end_time.strftime('%H:%M')}"
+                    )
+                
+                return f"Found {len(preferred_slots)} available slots:\n" + "\n".join(slot_list)        
+                # return f"Found {len(slots)} available slots:\n" + "\n".join(slot_list)
+        return f"Found {len(slots)} available slots:\n" + "\n".join(slot_list)
+    except Exception as e:
+        logger.error(f"Error in find_free_slots tool: {e}")
+        return f"Error finding free slots: {str(e)}"
+    
+@tool("get_upcoming_meetings", args_schema=GetMeetingsInput)
+async def get_upcoming_meetings(days_ahead: int = 7) -> str:
+    """
+    Get upcoming meetings from the calendar.
+    
+    Args:
+        days_ahead: Number of days to look ahead.
+    
+    Returns:
+        String with upcoming meetings.
+    """
+
+    try:
+        meetings = await calendar_service.get_upcoming_meetings(days_ahead)
+        
+        if not meetings:
+            return f"No upcoming meetings in the next {days_ahead} days"
+        
+        meeting_list = []
+        for meeting in meetings[:10]:  # show top 10 meetings
+            start_time = meeting['start_time']
+            if 'T' in start_time:
+                # parse datetime
+                dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                time_str = dt.strftime('%Y-%m-%d %H:%M')
+            else:
+                time_str = start_time
+            
+            meeting_list.append(f"• {meeting['title']} - {time_str}")
+        
+        return f"Upcoming meetings ({len(meetings)} total):\n" + "\n".join(meeting_list)
+        
+    except Exception as e:
+        logger.error(f"Error in get_upcoming_meetings tool: {e}")
+        return f"Error getting meetings: {str(e)}"
+
+CALENDAR_TOOLS = [
+    schedule_meeting,
+    find_free_slots,
+    get_upcoming_meetings
+]
+
+def get_calendar_tools():
+    """Get calendar tools."""
+    return CALENDAR_TOOLS

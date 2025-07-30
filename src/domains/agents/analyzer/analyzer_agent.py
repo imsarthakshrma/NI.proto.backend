@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from collections import defaultdict
 
-from src.core.base_agent import BaseAgent, Belief, Desire, Intention
+from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
 
 
 logger = logging.getLogger(__name__)
@@ -55,15 +55,15 @@ class AnalyzerAgent(BaseAgent):
 
         self.desires = [
             Desire(
-                desire_id="analyze_patterns",
-                description="Analyze observer patterns for intelligence",
-                priority=0.9,
+                id="analyze_patterns",
+                goal="Analyze observer patterns for intelligence",
+                priority=9,
                 conditions={"has_observer_data": True}
             ),
             Desire(
-                desire_id="identify_automation_opportunities",
-                description="Identify automation opportunities from observer patterns",
-                priority=0.8,
+                id="identify_automation_opportunities", 
+                goal="Identify automation opportunities from observer patterns",
+                priority=8,
                 conditions={"has_patterns": True}
             )
         ]
@@ -89,7 +89,7 @@ class AnalyzerAgent(BaseAgent):
                     beliefs.append(automation_belief)
 
             if observer_contacts:
-                contact_belief = await self._analyze_contact_relationships(observer_contacts)
+                contact_belief = await self._analyze_relationships(observer_contacts)
                 if contact_belief:
                     beliefs.append(contact_belief)
                 
@@ -106,14 +106,14 @@ class AnalyzerAgent(BaseAgent):
         updated_desires = []
 
         for desire in self.desires:
-            if desire.desire_id == "analyze_patterns":
-                if any(b.belief_type == "communication_analysis" for b in beliefs):
-                    desire.priority = 0.95
+            if desire.id == "analyze_patterns":
+                if any(b.type == "communication_analysis" for b in beliefs):
+                    desire.priority = 9
                     updated_desires.append(desire)
             
-            elif desire.desire_id == "identify_automation":
+            elif desire.id == "identify_automation_opportunities":
                 if len(self.automation_opportunities) < 15:
-                    desire.priority = 0.85
+                    desire.priority = 8
                     updated_desires.append(desire)
             
         return updated_desires
@@ -123,7 +123,7 @@ class AnalyzerAgent(BaseAgent):
         intentions = []
         
         for desire in sorted(desires, key=lambda d: d.priority, reverse=True):
-            if desire.desire_id == "analyze_patterns":
+            if desire.id == "analyze_patterns":
                 intentions.append(Intention(
                     intention_id=f"analyze_patterns_{datetime.now().timestamp()}",
                     description="Analyze Observer patterns for intelligence",
@@ -132,9 +132,9 @@ class AnalyzerAgent(BaseAgent):
                     parameters={"beliefs": beliefs}
                 ))
             
-            elif desire.desire_id == "identify_automation":
+            elif desire.id == "identify_automation_opportunities":
                 intentions.append(Intention(
-                    intention_id=f"identify_automation_{datetime.now().timestamp()}",
+                    intention_id=f"identify_automation_opportunities_{datetime.now().timestamp()}",
                     description="Identify automation opportunities",
                     action_type="automation_identification",
                     priority=desire.priority,
@@ -167,7 +167,7 @@ class AnalyzerAgent(BaseAgent):
         try:
             for belief in beliefs:
                 if belief.confidence > self.min_confidence_threshold:
-                    if belief.belief_type == "automation_opportunity":
+                    if belief.type == "automation_opportunity":
                         self._update_automation_confidence(belief)
             
             logger.info(f"Analyzer learning completed with {len(beliefs)} beliefs")
@@ -192,7 +192,7 @@ class AnalyzerAgent(BaseAgent):
             
             return Belief(
                 belief_id=f"comm_analysis_{datetime.now().timestamp()}",
-                belief_type="communication_analysis",
+                type="communication_analysis",
                 content=communication_analysis,
                 confidence=0.8,
                 source="analyzer_agent"
@@ -238,7 +238,7 @@ class AnalyzerAgent(BaseAgent):
             
             return Belief(
                 belief_id=f"automation_opportunities_{datetime.now().timestamp()}",
-                belief_type="automation_opportunity",
+                type="automation_opportunity",
                 content={"opportunities_found": len(opportunities), "opportunities": opportunities},
                 confidence=0.8,
                 source="analyzer_agent"
@@ -274,7 +274,7 @@ class AnalyzerAgent(BaseAgent):
 
             return Belief(
                 belief_id=f"relationship_analysis_{datetime.now().timestamp()}",
-                belief_type="relationship_analysis",
+                type="relationship_analysis",
                 content=relationship_analysis,
                 confidence=computed_confidence,
                 source="analyzer_agent"
@@ -295,7 +295,7 @@ class AnalyzerAgent(BaseAgent):
         }
         
         for belief in beliefs:
-            if belief.belief_type == "communication_analysis":
+            if belief.type == "communication_analysis":
                 analysis_results["insights_generated"] += 1
                 
                 insight = BusinessInsight(
