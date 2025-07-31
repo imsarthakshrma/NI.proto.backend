@@ -82,3 +82,8 @@ pytest-mock
 # Utilities
 python-dateutil
 pytz
+
+# Google Calendar
+google-api-python-client
+google-auth-httplib2 
+google-auth-oauthlib
