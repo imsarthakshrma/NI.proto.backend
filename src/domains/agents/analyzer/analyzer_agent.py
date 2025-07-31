@@ -107,7 +107,7 @@ class AnalyzerAgent(BaseAgent):
 
         for desire in self.desires:
             if desire.id == "analyze_patterns":
-                if any(b.type == "communication_analysis" for b in beliefs):
+                if any(belief.type == BeliefType.KNOWLEDGE for belief in beliefs):
                     desire.priority = 9
                     updated_desires.append(desire)
             
@@ -125,19 +125,19 @@ class AnalyzerAgent(BaseAgent):
         for desire in sorted(desires, key=lambda d: d.priority, reverse=True):
             if desire.id == "analyze_patterns":
                 intentions.append(Intention(
-                    intention_id=f"analyze_patterns_{datetime.now().timestamp()}",
-                    description="Analyze Observer patterns for intelligence",
+                    id=f"analyze_patterns_{datetime.now().timestamp()}",
+                    desire_id="analyze_patterns",
                     action_type="pattern_analysis",
-                    priority=desire.priority,
+                    # priority=desire.priority,
                     parameters={"beliefs": beliefs}
                 ))
             
             elif desire.id == "identify_automation_opportunities":
                 intentions.append(Intention(
-                    intention_id=f"identify_automation_opportunities_{datetime.now().timestamp()}",
-                    description="Identify automation opportunities",
+                    id=f"identify_automation_opportunities_{datetime.now().timestamp()}",
+                    desire_id="identify_automation_opportunities",
                     action_type="automation_identification",
-                    priority=desire.priority,
+                    # priority=desire.priority,
                     parameters={"patterns": beliefs}
                 ))
         
@@ -166,8 +166,8 @@ class AnalyzerAgent(BaseAgent):
         """Learn from analysis results"""
         try:
             for belief in beliefs:
-                if belief.confidence > self.min_confidence_threshold:
-                    if belief.type == "automation_opportunity":
+                if belief.confidence > self.min_confidence_threshold and belief.type == BeliefType.KNOWLEDGE:
+                    if belief.type == BeliefType.KNOWLEDGE:
                         self._update_automation_confidence(belief)
             
             logger.info(f"Analyzer learning completed with {len(beliefs)} beliefs")
@@ -191,8 +191,8 @@ class AnalyzerAgent(BaseAgent):
                     communication_analysis["communication_styles_identified"] += 1
             
             return Belief(
-                belief_id=f"comm_analysis_{datetime.now().timestamp()}",
-                type="communication_analysis",
+                id=f"comm_analysis_{datetime.now().timestamp()}",
+                type=BeliefType.KNOWLEDGE,
                 content=communication_analysis,
                 confidence=0.8,
                 source="analyzer_agent"
@@ -237,8 +237,8 @@ class AnalyzerAgent(BaseAgent):
                         self.automation_opportunities[opportunity.opportunity_id] = opportunity
             
             return Belief(
-                belief_id=f"automation_opportunities_{datetime.now().timestamp()}",
-                type="automation_opportunity",
+                id=f"automation_opportunities_{datetime.now().timestamp()}",
+                type=BeliefType.KNOWLEDGE,
                 content={"opportunities_found": len(opportunities), "opportunities": opportunities},
                 confidence=0.8,
                 source="analyzer_agent"
@@ -273,8 +273,8 @@ class AnalyzerAgent(BaseAgent):
             computed_confidence = high_confidence_count / max(len(relationships), 1)
 
             return Belief(
-                belief_id=f"relationship_analysis_{datetime.now().timestamp()}",
-                type="relationship_analysis",
+                id=f"relationship_analysis_{datetime.now().timestamp()}",
+                type=BeliefType.KNOWLEDGE,
                 content=relationship_analysis,
                 confidence=computed_confidence,
                 source="analyzer_agent"
@@ -295,7 +295,7 @@ class AnalyzerAgent(BaseAgent):
         }
         
         for belief in beliefs:
-            if belief.type == "communication_analysis":
+            if belief.content.get("type") == "communication_analysis":
                 analysis_results["insights_generated"] += 1
                 
                 insight = BusinessInsight(

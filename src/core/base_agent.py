@@ -82,6 +82,8 @@ class Intention:
     """
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     desire_id: str = ""
+    action_type: str = ""
+    parameters: Dict[str, Any] = field(default_factory=dict)
     plan: List[Dict[str, Any]] = field(default_factory=list)
     status: str = "pending" # pending, active, completed, failed
     created_at: datetime = field(default_factory=datetime.now)

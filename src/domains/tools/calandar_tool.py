@@ -5,7 +5,7 @@ Handles calendar operations and meeting scheduling
 
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 # from this import d
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
@@ -13,6 +13,7 @@ from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 import json
+from dateutil import tz
 
 # google calendar api imports
 try:
@@ -196,9 +197,9 @@ class GoogleCalendarService:
             return []
 
         try:
-            now = datetime.now()
-            time_min = now.isoformat() + 'Z'
-            time_max = (now + timedelta(days=days_ahead)).isoformat() + 'Z'
+            now = datetime.now(tz=tz.tzutc())
+            time_min = now.isoformat()
+            time_max = (now + timedelta(days=days_ahead)).isoformat()
 
             freebusy_query = {
                 'timeMin': time_min,
@@ -254,9 +255,9 @@ class GoogleCalendarService:
             return []
         
         try:
-            now = datetime.now()
-            time_min = now.isoformat() + 'Z'
-            time_max = (now + timedelta(days=days_ahead)).isoformat() + 'Z'
+            now = datetime.now(tz=tz.tzutc())
+            time_min = now.isoformat()
+            time_max = (now + timedelta(days=days_ahead)).isoformat()
             
             events_result = self.service.events().list(
                 calendarId=self.default_calendar_id,
