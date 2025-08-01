@@ -3,10 +3,9 @@ Analyzer Agent for DELA AI - Intelligence Analyzer
 Processes Observer patterns into structured intelligence and provides insights for automation
 """
 
-import asyncio
 import logging
 from datetime import datetime
-from readline import insert_text
+# from readline import insert_text
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -167,8 +166,7 @@ class AnalyzerAgent(BaseAgent):
         try:
             for belief in beliefs:
                 if belief.confidence > self.min_confidence_threshold and belief.type == BeliefType.KNOWLEDGE:
-                    if belief.type == BeliefType.KNOWLEDGE:
-                        self._update_automation_confidence(belief)
+                    self._update_automation_confidence(belief)
             
             logger.info(f"Analyzer learning completed with {len(beliefs)} beliefs")
             
