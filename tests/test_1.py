@@ -1,5 +1,5 @@
 """
-Full Integration Test for DELA AI System
+Full Integration Test for Native AI System
 Tests Observer → Analyzer → Calendar Tool Integration
 """
 
@@ -12,9 +12,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# DELA AI imports
+# Native AI imports
 from src.domains.agents.observer.ob_agent import ObserverAgent
 from src.domains.agents.analyzer.analyzer_agent import AnalyzerAgent
+from src.domains.agents.decision.decision_agent import DecisionAgent
 from src.domains.tools.calandar_tool import get_calendar_tools, schedule_meeting, find_free_slots
 
 # Configure logging
@@ -22,12 +23,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class DELAIntegrationTest:
-    """Complete DELA AI system integration test"""
+class NativeIntegrationTest:
+    """Complete Native AI system integration test"""
     
     def __init__(self):
         self.observer_agent = None
         self.analyzer_agent = None
+        self.decision_agent = None
         self.calendar_tools = get_calendar_tools()
         
         # Complex business conversation patterns for automation detection
@@ -85,7 +87,7 @@ class DELAIntegrationTest:
     async def setup_agents(self):
         """Initialize all agents"""
         try:
-            print("🤖 Initializing DELA AI Agents...")
+            print("🤖 Initializing Native AI Agents...")
             
             # Initialize Observer Agent
             self.observer_agent = ObserverAgent(agent_id="integration_observer_001")
@@ -97,9 +99,13 @@ class DELAIntegrationTest:
             
             # Test calendar tools availability
             print(f"✅ Calendar tools loaded: {len(self.calendar_tools)} tools available")
+
+            # Initialize Decision Agent
+            self.decision_agent = DecisionAgent(agent_id="integration_decision_001")
+            print(f"✅ Decision Agent initialized: {self.decision_agent.agent_id}")
             
             return True
-            
+
         except Exception as e:
             logger.error(f"Error setting up agents: {e}")
             return False
@@ -185,10 +191,60 @@ class DELAIntegrationTest:
             self.test_results["analyzer_opportunities"] = len(top_opportunities)
             self.test_results["total_time_saved"] = analyzer_summary.get('total_time_savings_potential', 0)
             
-            return True   #return len(top_opportunities) > 0
+            return len(top_opportunities) > 0
             
         except Exception as e:
             logger.error(f"Error in Analyzer testing: {e}")
+            return False
+
+    async def test_decision_intelligence(self):
+        """Test Decision Agent strategic decision making"""
+        print("\n🧠 Testing Decision Agent Intelligence...")
+        
+        try:
+            # Get Analyzer opportunities for Decision Agent
+            analyzer_opportunities = self.analyzer_agent.get_top_automation_opportunities(10)
+            analyzer_insights = self.analyzer_agent.get_business_insights()
+            
+            print(f"  Analyzer opportunities available: {len(analyzer_opportunities)}")
+            print(f"  Analyzer insights available: {len(analyzer_insights)}")
+            
+            # Process through Decision Agent
+            decision_context = {
+                "analyzer_opportunities": analyzer_opportunities,
+                "analyzer_insights": analyzer_insights,
+                "urgency_level": "medium",
+                "resources": {"cpu_usage": 0.3, "budget": 50000}
+            }
+            
+            result = await self.decision_agent.process(
+                {"message": "Evaluate automation opportunities and make strategic decisions"},
+                decision_context
+            )
+            
+            # Get Decision summary
+            decision_summary = self.decision_agent.get_decision_summary()
+            print(f"\n📊 Decision Intelligence Summary:")
+            print(f"  Total decisions: {decision_summary.get('total_decisions', 0)}")
+            print(f"  Approved decisions: {decision_summary.get('approved_decisions', 0)}")
+            print(f"  Rejected decisions: {decision_summary.get('rejected_decisions', 0)}")
+            print(f"  Total expected ROI: {decision_summary.get('total_expected_roi', 0):.1f}x")
+            
+            # Get approved decisions
+            approved_decisions = self.decision_agent.get_approved_decisions(5)
+            if approved_decisions:
+                print(f"\n🎯 Top Approved Decisions:")
+                for i, decision in enumerate(approved_decisions):
+                    print(f"  {i+1}. {decision.opportunity_id}: {decision.decision_type}")
+                    print(f"     ROI: {decision.expected_roi:.1f}x, Risk: {decision.risk_level}")
+            
+            self.test_results["decision_decisions"] = len(approved_decisions)
+            self.test_results["decision_roi"] = decision_summary.get('total_expected_roi', 0)
+            
+            return len(approved_decisions) > 0
+            
+        except Exception as e:
+            logger.error(f"Error in Decision testing: {e}")
             return False
     
     async def test_calendar_integration(self):
@@ -216,11 +272,11 @@ class DELAIntegrationTest:
             
             try:
                 schedule_result = await schedule_meeting.ainvoke({
-                    "title": "DELA AI Integration Test Meeting",
+                    "title": "Native AI Integration Test Meeting",
                     "start_time": meeting_time.isoformat(),
                     "duration_minutes": 60,
                     "attendees": ["test@example.com"],
-                    "description": "Automated test meeting created by DELA AI",
+                    "description": "Automated test meeting created by Native AI",
                     "location": "Meeting Room B"
                 })
                 print(f"    Result: {schedule_result}")
@@ -317,7 +373,7 @@ class DELAIntegrationTest:
     async def generate_test_report(self):
         """Generate comprehensive test report"""
         print("\n" + "="*60)
-        print("📋 DELA AI INTEGRATION TEST REPORT")
+        print("📋 Native AI INTEGRATION TEST REPORT")
         print("="*60)
         
         # Calculate success rate
@@ -355,7 +411,7 @@ class DELAIntegrationTest:
         
         print("🎯 Prototype Readiness:")
         if self.test_results["success"]:
-            print("  ✅ DELA AI prototype is ready for demo!")
+            print("  ✅ Native AI prototype is ready for demo!")
             print("  ✅ Observer → Analyzer → Calendar workflow functional")
             print("  ✅ Meeting automation capabilities demonstrated")
         else:
@@ -374,11 +430,11 @@ class DELAIntegrationTest:
 
 
 async def run_full_integration_test():
-    """Run the complete DELA AI integration test"""
-    print("🚀 Starting DELA AI Full Integration Test")
+    """Run the complete Native AI integration test"""
+    print("🚀 Starting Native AI Full Integration Test")
     print("="*60)
     
-    test_suite = DELAIntegrationTest()
+    test_suite = NativeIntegrationTest()
     
     try:
         # Setup
@@ -387,15 +443,21 @@ async def run_full_integration_test():
             print("❌ Agent setup failed. Aborting test.")
             return False
         
+        # Initialize agents
+        # test_suite.observer_agent = ObserverAgent("integration_observer_001")
+        # test_suite.analyzer_agent = AnalyzerAgent("integration_analyzer_001") 
+        # test_suite.decision_agent = DecisionAgent("integration_decision_001") 
+
         # Run tests
         observer_success = await test_suite.test_observer_learning()
         analyzer_success = await test_suite.test_analyzer_intelligence()
+        decision_success = await test_suite.test_decision_intelligence()
         calendar_success = await test_suite.test_calendar_integration()
         workflow_success = await test_suite.test_end_to_end_workflow()
 
 
         # Check if all tests passed
-        if not all([observer_success, analyzer_success, calendar_success, workflow_success]):
+        if not all([observer_success, analyzer_success, decision_success, calendar_success, workflow_success]):
             logger.error("One or more tests failed")
             return False
         
@@ -415,8 +477,8 @@ if __name__ == "__main__":
     success = asyncio.run(run_full_integration_test())
     
     if success:
-        print("\n🎉 DELA AI Integration Test: SUCCESS!")
+        print("\n🎉 Native AI Integration Test: SUCCESS!")
         print("Ready for Thursday demo! 🚀")
     else:
-        print("\n⚠️ DELA AI Integration Test: NEEDS ATTENTION")
+        print("\n⚠️ Native AI Integration Test: NEEDS ATTENTION")
         print("Review failed components before demo.")
