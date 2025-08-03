@@ -1,9 +1,9 @@
 """
-Decision Agent for Dela AI
+Decision Agent for Native AI
 Processes analyzer insights and makes strategic decisions for automation
 """
 
-import asyncio
+# import asyncio
 import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -805,16 +805,17 @@ class DecisionAgent(BaseAgent):
         # Simplified implementation - you'd customize based on your belief structure
         try:
             # Extract predicted vs actual risk from belief content
-            if hasattr(belief, 'metadata') and belief.metadata:
-                predicted_risk = belief.metadata.get('predicted_risk', 0.5)
-                actual_risk = belief.metadata.get('actual_risk', 0.5)
+            content = belief.content
+            if isinstance(content, dict):
+                predicted_risk = content.get('predicted_risk', 0.5)
+                actual_risk = content.get('actual_risk', 0.5)
                 
                 # Calculate accuracy (how close prediction was to reality)
                 diff = abs(predicted_risk - actual_risk)
                 accuracy = max(0.0, 1.0 - diff)
                 return accuracy
             
-            # Fallback: assume moderate accuracy if no metadata
+            # fallback: assume moderate accuracy if no risk data
             return 0.6
             
         except Exception:
@@ -823,21 +824,22 @@ class DecisionAgent(BaseAgent):
     def _calculate_roi_accuracy(self, belief: Belief) -> float:
         """Calculate how accurate our ROI prediction was"""
         try:
-            # Extract predicted vs actual ROI from belief content
-            if hasattr(belief, 'metadata') and belief.metadata:
-                predicted_roi = belief.metadata.get('predicted_roi', 1.0)
-                actual_roi = belief.metadata.get('actual_roi', 1.0)
+            # extract predicted vs actual ROI from belief content
+            content = belief.content
+            if isinstance(content, dict):
+                predicted_roi = content.get('predicted_roi', 1.0)
+                actual_roi = content.get('actual_roi', 1.0)
                 
-                # Calculate accuracy (how close prediction was)
-                if predicted_roi > 0:
-                    ratio = min(actual_roi / predicted_roi, predicted_roi / actual_roi)
-                    return ratio
+                # Calculate accuracy (how close prediction was to reality)
+                diff = abs(predicted_roi - actual_roi) / max(predicted_roi, actual_roi, 0.1)
+                accuracy = max(0.0, 1.0 - diff)
+                return accuracy
             
-            # Fallback: assume moderate accuracy
-            return 0.7
+            # fallback: assume moderate accuracy if no ROI data
+            return 0.6
             
         except Exception:
-            return 0.5  # Default moderate accuracy
+            return 0.5  # default moderate accuracy
 
     def _store_learning_history(self, belief: Belief) -> None:
         """Store learning history for analysis"""
