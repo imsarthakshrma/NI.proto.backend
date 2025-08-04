@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class DelaBot:
+class NativeAIBot:
     
     def __init__(self):
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -46,7 +46,7 @@ class DelaBot:
         self.processed_messages = 0
         self.learned_patterns = 0
         
-        logger.info(f"DELA Bot initialized with Observer Agent: {self.observer_agent.agent_id}")
+        logger.info(f"Native AI Bot initialized with Observer Agent: {self.observer_agent.agent_id}")
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         
@@ -56,7 +56,7 @@ class DelaBot:
         logger.info(f"Start command from user {user.id} in chat {chat.id}")
 
         welcome_message = """
-        **DELA AI Observer Bot**
+        **Native AI Observer Bot**
 
         I'm your intelligent business assistant that learns from your communication patterns.
 
@@ -92,7 +92,7 @@ class DelaBot:
             intelligence_summary = self.observer_agent.get_intelligence_summary()
             
             status_message = f"""
-            **DELA Observer Status**
+            **Native AI Observer Status**
 
             **Agent Info:**
             - Agent ID: `{status['agent_id']}`
@@ -177,15 +177,15 @@ class DelaBot:
                 return
             
             help_message = """
-            **DELA AI Help**
+            **Native AI Help**
 
-            **How DELA learns:**
+            **How Native AI learns:**
             1. **Observes** your messages and communication style
             2. **Analyzes** decision patterns and business relationships
             3. **Identifies** repetitive tasks for automation
             4. **Builds** intelligence about your work patterns
 
-            **What DELA detects:**
+            **What Native AI detects:**
             - Communication tone (formal/casual)
             - Decision patterns (approve/reject)
             - Automation opportunities
@@ -203,7 +203,7 @@ class DelaBot:
             /patterns - See learned patterns
             /help - This help message
 
-            **Need support?** Contact your DELA administrator.
+            **Need support?** Contact your Native AI administrator.
             """
             
             await message.reply_text(help_message, parse_mode='Markdown')
@@ -261,7 +261,7 @@ class DelaBot:
             summary = self.observer_agent.get_intelligence_summary()
             
             update_message = f"""
-            **Learning Update**
+            **Native AI Learning Update**
 
             Processed {self.processed_messages} messages
             Learned {summary.get('patterns_learned', 0)} patterns
@@ -302,7 +302,7 @@ class DelaBot:
         try:
             self.setup_handlers()
             
-            logger.info("Starting DELA Bot...")
+            logger.info("Starting Native AI...")
             await self.application.initialize()
             await self.application.start()
             
@@ -310,7 +310,7 @@ class DelaBot:
             await self.application.updater.start_polling()
             self.is_running = True
             
-            logger.info("🤖 DELA Bot is running and ready to learn!")
+            logger.info("🤖 Native AI is running and ready to learn!")
             
             # Keep the bot running
             while self.is_running:
@@ -322,7 +322,7 @@ class DelaBot:
     
     async def stop_bot(self):
         try:
-            logger.info("Stopping DELA Bot...")
+            logger.info("Stopping Native AI...")
             self.is_running = False
             
             if self.application:
@@ -330,7 +330,7 @@ class DelaBot:
                 await self.application.stop()
                 await self.application.shutdown()
             
-            logger.info("DELA Bot stopped successfully")
+            logger.info("🤖 Native AI stopped successfully")
             
         except Exception as e:
             logger.error(f"Error stopping bot: {e}")
@@ -338,7 +338,7 @@ class DelaBot:
 
 # main execution
 async def main():
-    bot = DelaBot()
+    bot = NativeAIBot()
     
     try:
         await bot.start_bot()

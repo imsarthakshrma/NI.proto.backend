@@ -48,11 +48,11 @@ class TelegramMessageProcessor:
                 "timestamp": message.date.isoformat() if message.date else datetime.now().isoformat(),
                 "message_id": message.message_id,
                 "reply_to": self._get_reply_info(message),
-                "forwarded": message.forward_from is not None,
+                "forwarded": hasattr(message, 'forward_origin') and message.forward_origin is not None,
                 "edited": message.edit_date is not None,
                 "priority": self._determine_priority(content, user, chat),
                 "frequency": "unknown",  # could be enhanced with user history
-                "language": message.from_user.language_code if message.from_user else "unknown"
+                "language": user.language_code if user else "unknown"
             }
             
             # create input data for observer agent
