@@ -3,12 +3,16 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any
 from dataclasses import dataclass, field
-import openai
+# import openai
+# from openai import AsyncOpenAI
 import os
-
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
 
 logger = logging.getLogger(__name__)
+load_dotenv()
 
 @dataclass
 class ProactiveMessage:
@@ -27,24 +31,40 @@ class ProactiveCommunicationAgent(BaseAgent):
         super().__init__(agent_id, agent_type="communication")
         self.scheduled_messages: Dict[str, ProactiveMessage] = {}
         self.user_contexts: Dict[str, Dict[str, Any]] = {}
+        self.openai = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.7,
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
         
-        # Initialize OpenAI client
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        
-        # Professional PA personality prompts
+        # Professional PA/Co-founder personality prompts
         self.personality_prompts = {
-            "base": """You are Native AI, a professional executive assistant and co-founder-level AI. 
-            You communicate with confidence, professionalism, and care. You're proactive, efficient, 
-            and always focused on helping your user succeed. Keep messages concise but warm.""",
+            "base": """You are Native AI, a professional executive assistant and business co-founder. 
+            You communicate like a trusted colleague who deeply understands business operations. You're professional 
+            but approachable, efficient yet personable. You focus on getting things done and helping your user succeed. 
+            You speak like a seasoned business professional - direct, helpful, and always thinking ahead.""",
+            
+            "conversational_chat": """You are Native AI, acting as a professional executive assistant and business partner. 
+            You communicate naturally like a trusted colleague who knows the business inside and out. You're helpful, 
+            efficient, and always thinking about how to improve operations. You can discuss business strategy, handle 
+            operational tasks, or have professional conversations. You're like talking to your most competent business partner.""",
+            
+            "capability_explanation": """You are Native AI explaining your business capabilities as a professional assistant. 
+            Be specific about your operational skills and business tools. Sound like an experienced executive assistant 
+            explaining how they can support the business - confident, knowledgeable, and focused on results.""",
+            
+            "automation_assistance": """You are Native AI helping with business automation and operations. You understand 
+            workflows, processes, and efficiency improvements. You communicate like a business operations expert who can 
+            identify bottlenecks and implement solutions. Be practical and results-focused.""",
             
             "meeting_reminder": """Generate a professional meeting reminder message. Sound like an 
             executive assistant who cares about their executive's success. Be proactive and helpful.""",
             
             "automation_update": """Generate an update about completed automations. Sound like a 
-            co-founder sharing wins and progress. Be enthusiastic but professional.""",
+            business partner sharing operational wins and improvements. Be professional but enthusiastic.""",
             
             "response_nudge": """Generate a gentle nudge about pending responses. Sound like a 
-            trusted advisor who helps manage important relationships.""",
+            trusted business advisor who helps manage important relationships.""",
             
             "calendar_alert": """Generate a calendar alert. Sound like an executive assistant 
             who's always prepared and thinking ahead."""
@@ -123,7 +143,24 @@ class ProactiveCommunicationAgent(BaseAgent):
                     source=self.agent_id
                 )
                 beliefs.append(belief)
-                
+            
+            # Handle conversational messages
+            if context.get("message_type") == "conversational_chat" or context.get("conversation_type") == "natural_conversation":
+                belief = Belief(
+                    id=f"conversational_message_{datetime.now().timestamp()}",
+                    type=BeliefType.OBSERVATION,
+                    content={
+                        "type": "conversational_message",
+                        "user_message": context.get("user_message", ""),
+                        "user_id": context.get("user_name", "user"),
+                        "conversation_context": context.get("conversation_history", []),
+                        "user_profile": context.get("user_profile", {})
+                    },
+                    confidence=0.95,
+                    source=self.agent_id
+                )
+                beliefs.append(belief)
+            
             logger.info(f"Native Proactive Agent perceived {len(beliefs)} events")
             return beliefs
             
@@ -170,6 +207,14 @@ class ProactiveCommunicationAgent(BaseAgent):
                         priority=8,
                         conditions={"is_evening": True}
                     ))
+                
+                elif content.get("type") == "conversational_message":
+                    desires.append(Desire(
+                        id="respond_to_conversation",
+                        goal="Generate natural conversational response using OpenAI",
+                        priority=10,
+                        conditions={"has_user_message": True}
+                    ))
                     
             return desires
             
@@ -202,6 +247,10 @@ class ProactiveCommunicationAgent(BaseAgent):
                           belief.content.get("type") == "daily_summary"):
                         relevant_belief = belief
                         break
+                    elif (desire.id == "respond_to_conversation" and 
+                          belief.content.get("type") == "conversational_message"):
+                        relevant_belief = belief
+                        break
                 
                 if relevant_belief:
                     intention = Intention(
@@ -227,15 +276,21 @@ class ProactiveCommunicationAgent(BaseAgent):
         result = {"action_taken": False, "message_sent": ""}
         
         try:
+            logger.info(f"🔍 ProactiveCommunicationAgent.act called with intention: {intention.action_type}")
             message_type = intention.parameters.get("message_type")
             belief_content = intention.parameters.get("belief_content", {})
             user_id = intention.parameters.get("user_id")
             
+            logger.info(f" Act parameters - message_type: {message_type}, user_id: {user_id}")
+            
             # Generate personalized message using LLM
+            logger.info(f" Calling _generate_proactive_message...")
             message = await self._generate_proactive_message(message_type, belief_content, context)
+            logger.info(f" Generated message: {message}")
             
             if message:
                 # Send message via Telegram
+                logger.info(f" Calling _send_telegram_message...")
                 await self._send_telegram_message(user_id, message)
                 
                 result = {
@@ -246,11 +301,16 @@ class ProactiveCommunicationAgent(BaseAgent):
                 }
                 
                 logger.info(f"Native sent proactive message: {message_type} to {user_id}")
+            else:
+                logger.warning(f" No message generated for type: {message_type}")
             
         except Exception as e:
             logger.error(f"Error in proactive action: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             result["error"] = str(e)
             
+        logger.info(f" Act result: {result}")
         return result
     
     async def learn(self, beliefs: List[Belief], context: Dict[str, Any]) -> None:
@@ -273,10 +333,58 @@ class ProactiveCommunicationAgent(BaseAgent):
             # Get user context for personalization
             user_id = belief_content.get("user_id", "user")
             user_context = self.user_contexts.get(user_id, {})
-            user_name = user_context.get("name", "there")
+            user_name = context.get("user_name", user_context.get("name", "there"))
+            user_message = context.get("user_message", "")
             
-            # Build context-specific prompt
-            if message_type == "send_meeting_confirmation":
+            logger.info(f"Generating message for type: {message_type}, user: {user_name}, message: {user_message}")
+            
+            # Handle conversational chat with rich context
+            if message_type == "conversational_chat" or context.get("conversation_type") == "natural_conversation":
+                conversation_history = context.get("conversation_history", [])
+                user_profile = context.get("user_profile", {})
+                native_capabilities = context.get("native_capabilities", {})
+                replied_to_message = context.get("replied_to_message")
+                
+                # Build conversation context
+                recent_messages = ""
+                if conversation_history:
+                    recent_messages = "\n".join([
+                        f"{'User' if msg.get('is_user') else 'Native'}: {msg.get('content', '')}" 
+                        for msg in conversation_history[-5:]  # Last 5 messages
+                    ])
+                
+                # Build capabilities summary
+                capabilities_summary = ""
+                if native_capabilities:
+                    capabilities_summary = "\n".join([
+                        f"- {cap_name.title()}: {cap_data.get('description', '')}"
+                        for cap_name, cap_data in native_capabilities.items()
+                    ])
+                
+                prompt = f"""
+                {self.personality_prompts['conversational_chat']}
+                
+                User's current message: "{user_message}"
+                User's name: {user_name}
+                
+                {f"User replied to: '{replied_to_message}'" if replied_to_message else ""}
+                
+                Recent conversation context:
+                {recent_messages if recent_messages else "This is the start of our conversation."}
+                
+                Your business capabilities (mention if relevant to the conversation):
+                {capabilities_summary}
+                
+                Respond professionally and naturally to the user's message. You're their trusted business partner and executive assistant. 
+                If they ask about your capabilities, explain them in business terms. If they want to automate something, 
+                be proactive about helping with operational improvements. Keep the conversation professional but personable.
+                
+                Focus on business value and practical solutions. Keep your response under 150 words and sound like a competent business colleague.
+                """
+                
+                logger.info(f"Using conversational prompt for user message: {user_message}")
+                
+            elif message_type == "send_meeting_confirmation":
                 meeting = belief_content.get("meeting", {})
                 contact = meeting.get("contact", "your contact")
                 time = meeting.get("time", "today")
@@ -346,39 +454,69 @@ class ProactiveCommunicationAgent(BaseAgent):
                 """
             
             else:
-                return "Hi! I'm here to help you stay organized and efficient. 🚀"
+                # Default conversational response
+                prompt = f"""
+                {self.personality_prompts['base']}
+                
+                User said: "{user_message}"
+                
+                Respond naturally and helpfully to {user_name}. Be conversational and engaging.
+                """
             
             # Call OpenAI API
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": self.personality_prompts['base']},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=100,
-                temperature=0.7
-            )
+            system_content = self.personality_prompts.get(context.get('conversation_type', 'base'), self.personality_prompts['base'])
             
-            message = response.choices[0].message.content.strip()
-            return message
+            try:
+                response = await self.openai.ainvoke([
+                    SystemMessage(content=system_content),
+                    HumanMessage(content=prompt)
+                ])
+                
+                message = response.content.strip()
+                logger.info(f"Generated proactive message: {message}")
+                return message
+            except Exception as e:
+                logger.error(f"Error in LangChain OpenAI call: {str(e)}")
+                raise e
             
         except Exception as e:
             logger.error(f"Error generating proactive message: {e}")
-            # Fallback messages
-            fallbacks = {
-                "send_meeting_confirmation": "Hi! I scheduled your meeting for today. Are you attending? Let me know if you need any preparation help! 📅",
-                "share_automation_success": "Great news! I just automated another task for you, saving 15 minutes. Your efficiency is improving! 🚀",
-                "nudge_pending_response": "Friendly reminder: You have a pending response about an important matter. Need help drafting a reply? 📝",
-                "send_daily_summary": "End of day summary: Great progress today! Tomorrow's priorities are ready. Have a good evening! ✨"
-            }
-            return fallbacks.get(message_type, "Hi! I'm here to help you stay productive! 🚀")
+            # Professional fallback messages with variety
+            user_message_lower = user_message.lower()
+            
+            if "how can you help" in user_message_lower or "what can you do" in user_message_lower:
+                return f"Hi {user_name}! I'm Native AI, your executive assistant and business operations partner. I handle automation, scheduling, communications, business analysis, and continuous learning to improve your operations. What business challenge can I help you tackle today?"
+            elif "who are you" in user_message_lower or "what are you" in user_message_lower:
+                return f"I'm Native AI, your intelligent business co-founder and executive assistant. I specialize in automating workflows, managing communications, analyzing business patterns, and helping you stay organized. Think of me as your most capable business partner."
+            elif "hello" in user_message_lower or "hi" in user_message_lower:
+                return f"Hello {user_name}! Ready to tackle some business objectives today. How can I support your operations?"
+            elif "help me with" in user_message_lower or "i need" in user_message_lower:
+                return f"Absolutely, {user_name}! I'm here to help with business operations, automation, scheduling, and strategic support. What specific challenge are you facing?"
+            elif "what" in user_message_lower and ("can" in user_message_lower or "do" in user_message_lower):
+                return f"I can help you with: automating repetitive tasks, managing your schedule, analyzing business patterns, handling communications, and providing strategic insights. What area interests you most?"
+            else:
+                # Vary the fallback response to avoid repetition
+                import random
+                fallbacks = [
+                    f"Let me help you with that, {user_name}. What specific aspect would you like me to focus on?",
+                    f"I'm here to support your business operations, {user_name}. Could you tell me more about what you need?",
+                    f"That's something I can definitely assist with, {user_name}. What would be the most helpful approach?",
+                    f"I understand, {user_name}. Let me see how I can best support you with this business need."
+                ]
+                return random.choice(fallbacks)
+    
+    async def _show_typing(self, update: Update):
+        """Show 'Bot is typing...' indicator"""
+        try:
+            await update.message.chat.send_action(action=ChatAction.TYPING)
+        except Exception as e:
+            logger.error(f"Error showing typing indicator: {e}")
     
     async def _send_telegram_message(self, user_id: str, message: str):
         """Send message via Telegram"""
         try:
             # Import your telegram bot function
-            from src.integration.telegram.telegram_bot import send_message_to_user
-            await send_message_to_user(user_id, message)
+            logger.info(f"Would send Telegram message to {user_id}: {message}")
             
         except Exception as e:
             logger.error(f"Error sending Telegram message: {e}")

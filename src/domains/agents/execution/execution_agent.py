@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
+from langchain_core.tools import BaseTool
+from langchain_core.messages import HumanMessage
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,10 @@ class ExecutionAgent(BaseAgent):
 
         self.executions: Dict[str, AutomationExecution] = {}
         self.execution_results: Dict[str, ExecutionResult] = {}
-        self.calendar_tools: Dict[str, Any] = {}
+        
+        # Tool system for actual task execution
+        self.available_tools: Dict[str, BaseTool] = {}
+        self.calendar_tools: Dict[str, Any] = {}  # Legacy support
         
         # Execution metrics
         self.total_executions = 0
@@ -78,6 +83,24 @@ class ExecutionAgent(BaseAgent):
         ]
 
         logger.info(f"Execution Agent initialized: {self.agent_id}")
+
+    def register_tool(self, tool_name: str, tool: BaseTool):
+        """Register a tool for task execution"""
+        self.available_tools[tool_name] = tool
+        logger.info(f"Tool registered: {tool_name}")
+    
+    def register_tools(self, tools: Dict[str, BaseTool]):
+        """Register multiple tools for task execution"""
+        self.available_tools.update(tools)
+        logger.info(f"Registered {len(tools)} tools: {list(tools.keys())}")
+    
+    def get_available_tools(self) -> List[str]:
+        """Get list of available tool names"""
+        return list(self.available_tools.keys())
+    
+    def has_tool(self, tool_name: str) -> bool:
+        """Check if a specific tool is available"""
+        return tool_name in self.available_tools
 
     def set_calendar_tools(self, tools: Dict[str, Any]):
         """Set calendar tools for execution"""
@@ -117,45 +140,132 @@ class ExecutionAgent(BaseAgent):
             logger.error(f"Error in Execution Agent perception: {e}")
             return beliefs
 
-    async def act(self, intentions: List[Intention]) -> Dict[str, Any]:
-        """Execute automation actions"""
-        results = {
-            "executions_started": 0,
-            "executions_completed": 0,
-            "time_saved": 0.0,
-            "success_rate": 0.0
-        }
-
+    async def act(self, intention: Intention, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute automation actions using tools"""
         try:
-            for intention in intentions:
-                if intention.action == "execute_automation":
-                    result = await self._execute_automation(intention.parameters)
-                    if result["success"]:
-                        results["executions_completed"] += 1
-                        results["time_saved"] += result.get("time_saved", 0)
+            logger.info(f"🚀 Execution Agent acting on intention: {intention.action_type}")
+            
+            # Extract task information from context
+            user_message = context.get("user_message", "")
+            
+            # Determine task type from intention and user message
+            task_type = self._determine_task_type(intention.action_type, user_message)
+            
+            if task_type:
+                # Prepare parameters for tool execution
+                parameters = self._prepare_task_parameters(task_type, user_message, context)
                 
-                elif intention.action == "schedule_meeting":
-                    result = await self._execute_meeting_scheduling(intention.parameters)
-                    if result["success"]:
-                        results["executions_completed"] += 1
-                        results["time_saved"] += result.get("time_saved", 0)
-
-                elif intention.action == "send_automated_response":
-                    result = await self._execute_automated_response(intention.parameters)
-                    if result["success"]:
-                        results["executions_completed"] += 1
-                        results["time_saved"] += result.get("time_saved", 0)
-
-            # Calculate success rate
-            if self.total_executions > 0:
-                results["success_rate"] = self.successful_executions / self.total_executions
-
-            logger.info(f"Execution Agent completed {results['executions_completed']} executions")
-            return results
-
+                # Execute using tools
+                logger.info(f"🎯 Executing task: {task_type} with tools")
+                result = await self._execute_task_with_tools(task_type, parameters)
+                
+                if result.get('success'):
+                    logger.info(f"✅ Tool-based execution successful: {result.get('description')}")
+                    return result
+                else:
+                    logger.warning(f"⚠️ Tool-based execution failed: {result.get('error')}")
+                    # Fallback to legacy methods if tools fail
+                    return await self._fallback_execution(intention, context)
+            else:
+                # No specific task identified, use general automation
+                logger.info("📋 No specific task identified, using general automation")
+                return await self._fallback_execution(intention, context)
+                
         except Exception as e:
             logger.error(f"Error in Execution Agent action: {e}")
-            return results
+            return {
+                "success": False,
+                "action_taken": False,
+                "error": str(e)
+            }
+    
+    def _determine_task_type(self, action_type: str, user_message: str) -> Optional[str]:
+        """Determine the task type from intention and user message"""
+        action_lower = action_type.lower()
+        message_lower = user_message.lower()
+        
+        # Check for specific task patterns
+        if "email" in action_lower or "email" in message_lower or "send" in message_lower:
+            return "send_email"
+        elif "meeting" in action_lower or "schedule" in action_lower or "meeting" in message_lower or "schedule" in message_lower:
+            return "schedule_meeting"
+        elif "report" in action_lower or "create" in action_lower or "report" in message_lower or "generate" in message_lower:
+            return "create_report"
+        elif "file" in action_lower or "document" in message_lower:
+            return "create_file"
+        elif "search" in action_lower or "search" in message_lower:
+            return "web_search"
+        elif "message" in action_lower or "notify" in message_lower:
+            return "send_message"
+        
+        return None
+    
+    def _prepare_task_parameters(self, task_type: str, user_message: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare parameters for task execution based on task type"""
+        base_params = {
+            "user_message": user_message,
+            "user": context.get("user", "User"),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if task_type == "send_email":
+            return {
+                **base_params,
+                "recipient": "user@example.com",
+                "subject": "Automated Email from Native AI",
+                "body": f"This email was generated based on your request: {user_message}"
+            }
+        elif task_type == "schedule_meeting":
+            return {
+                **base_params,
+                "title": "Team Meeting",
+                "start_time": (datetime.now() + timedelta(days=1)).isoformat(),
+                "duration_minutes": 30,
+                "attendees": ["team@company.com"],
+                "description": f"Meeting scheduled based on: {user_message}"
+            }
+        elif task_type == "create_report":
+            return {
+                **base_params,
+                "title": "Automated Report",
+                "content": f"Report generated based on: {user_message}\n\nDate: {datetime.now().strftime('%Y-%m-%d')}\n\nThis report was automatically created by Native AI.",
+                "format": "text"
+            }
+        elif task_type == "create_file":
+            return {
+                **base_params,
+                "filename": f"document_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                "content": f"Document created based on: {user_message}\n\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            }
+        else:
+            return base_params
+    
+    async def _fallback_execution(self, intention: Intention, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback to legacy execution methods when tools are not available"""
+        try:
+            logger.info("🔄 Using fallback execution methods")
+            
+            # Use legacy automation method
+            result = await self._execute_automation({"decision_id": "unknown"})
+            
+            return {
+                "success": result["success"],
+                "action_taken": result["success"],
+                "execution_id": result.get("execution_id"),
+                "description": "General automation executed (fallback)",
+                "details": result.get("details", "Automation completed using fallback method"),
+                "time_saved": result.get("time_saved", 0),
+                "real_execution": False,
+                "fallback_used": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Fallback execution failed: {e}")
+            return {
+                "success": False,
+                "action_taken": False,
+                "error": f"Fallback execution failed: {str(e)}"
+            }
 
     async def learn(self, beliefs: List[Belief], context: Dict[str, Any]) -> None:
         """Learn from execution results and improve performance"""
@@ -475,6 +585,102 @@ class ExecutionAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Error executing automated response: {e}")
             return {"success": False, "error": str(e)}
+
+    async def _execute_task_with_tools(self, task_type: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute tasks using available tools"""
+        try:
+            execution_id = f"tool_exec_{datetime.now().timestamp()}"
+            logger.info(f"🚀 Executing task with tools: {task_type}")
+            
+            # Map task types to required tools
+            tool_mapping = {
+                "send_email": "email_tool",
+                "schedule_meeting": "calendar_tool", 
+                "create_file": "file_tool",
+                "send_message": "messaging_tool",
+                "create_report": "report_tool",
+                "web_search": "search_tool"
+            }
+            
+            required_tool = tool_mapping.get(task_type)
+            if not required_tool:
+                return {
+                    "success": False,
+                    "error": f"Unknown task type: {task_type}"
+                }
+            
+            # Check if required tool is available
+            if not self.has_tool(required_tool):
+                logger.warning(f"Required tool '{required_tool}' not available for task '{task_type}'")
+                return {
+                    "success": False,
+                    "error": f"Tool '{required_tool}' not available",
+                    "available_tools": self.get_available_tools()
+                }
+            
+            # Get the tool and execute
+            tool = self.available_tools[required_tool]
+            logger.info(f"🔧 Using tool: {required_tool}")
+            
+            # Execute tool with parameters
+            try:
+                if hasattr(tool, 'ainvoke'):
+                    # Async tool execution
+                    result = await tool.ainvoke(parameters)
+                elif hasattr(tool, 'invoke'):
+                    # Sync tool execution
+                    result = tool.invoke(parameters)
+                else:
+                    # Direct call
+                    result = await tool(parameters)
+                
+                logger.info(f"✅ Tool execution successful: {result}")
+                
+                # Track execution metrics
+                self.total_executions += 1
+                self.successful_executions += 1
+                
+                # Estimate time saved based on task type
+                time_saved_mapping = {
+                    "send_email": 5.0,
+                    "schedule_meeting": 15.0,
+                    "create_file": 10.0,
+                    "create_report": 20.0,
+                    "send_message": 3.0,
+                    "web_search": 8.0
+                }
+                time_saved = time_saved_mapping.get(task_type, 5.0)
+                self.total_time_saved += time_saved
+                
+                return {
+                    "success": True,
+                    "action_taken": True,
+                    "execution_id": execution_id,
+                    "task_type": task_type,
+                    "tool_used": required_tool,
+                    "result": result,
+                    "time_saved": time_saved,
+                    "description": f"Task '{task_type}' executed using '{required_tool}'",
+                    "details": str(result)[:200] + "..." if len(str(result)) > 200 else str(result),
+                    "real_execution": True
+                }
+                
+            except Exception as tool_error:
+                logger.error(f"❌ Tool execution failed: {tool_error}")
+                self.total_executions += 1
+                return {
+                    "success": False,
+                    "error": f"Tool execution failed: {str(tool_error)}",
+                    "tool_used": required_tool,
+                    "task_type": task_type
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in tool-based execution: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     async def _update_execution_knowledge(self, belief: Belief) -> None:
         """Update execution knowledge based on belief"""
