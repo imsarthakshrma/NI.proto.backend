@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
+from telegram import Update
 
 logger = logging.getLogger(__name__)
 load_dotenv()

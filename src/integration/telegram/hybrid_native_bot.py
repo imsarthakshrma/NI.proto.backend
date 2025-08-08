@@ -160,6 +160,18 @@ class HybridNativeAI:
         
         logger.info("🤖 Hybrid Native AI initialized with dual learning modes")
 
+    def get_greeting(self):
+        current_hour = datetime.now().hour
+            
+        if 5 <= current_hour < 12:
+            return "Good morning"
+        elif 12 <= current_hour < 17:
+            return "Good afternoon"
+        elif 17 <= current_hour < 22:
+            return "Good evening"
+        else:
+            return "Hello night owl"
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start command - auto-activates all Native intelligence"""
         user = update.effective_user
@@ -168,31 +180,10 @@ class HybridNativeAI:
         self.interactive_users.add(user.id)
         
         welcome_message = f"""
-    **Native AI - Your Intelligent Co-Founder**
 
-    Hi {user.first_name}! I'm now **fully activated** and ready to automate your business!
+    **{self.get_greeting()} {user.first_name}!**
 
-    ** What I'm doing right now:**
-    **Learning** from your conversations and patterns
-    **Monitoring** for automation opportunities  
-    **Ready** to execute tasks when you ask
-    **Scheduled** to give you proactive insights
-
-    **Just talk to me naturally:**
-    - "Schedule a meeting with Sarah tomorrow at 2pm"
-    - "Remind me to follow up with the client next week"  
-    - "Automate my weekly status reports"
-    - "What patterns have you noticed in my work?"
-
-    **I'll proactively help by:**
-    - Morning briefings with your day ahead
-    - Suggesting automations I discover
-    - Reminding you of follow-ups
-    - Coordinating your schedule and tasks
-
-    **No commands needed - just chat with me like a co-founder!** 🎯
-
-    *What would you like me to help automate today?*
+    *What would you like me to help you with today?*
         """
         
         await update.message.reply_text(welcome_message, parse_mode='Markdown')

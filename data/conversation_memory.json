@@ -114,6 +114,12 @@
         "content": "Hi Sarthak,\n\nI'll go ahead and schedule the follow-up meeting with Jasminder at 4:30 today. If you have any last-minute additions or changes, just let me know, and I'll adjust accordingly.\n\nOnce it's on your calendar, I'll handle any necessary follow-up communications to ensure everything is aligned. If there's anything else I can do to streamline your schedule or assist with other tasks, feel free to reach out.\n\nLooking forward to supporting your continued progress!\n\nBest,  \nNative",
         "is_user": false,
         "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T12:01:06.121397",
+        "content": "Hi",
+        "is_user": true,
+        "reply_to": null
       }
     ],
     "123456": [
@@ -258,7 +264,7 @@
       "first_name": "Sarthak",
       "last_name": null,
       "username": null,
-      "last_seen": "2025-08-05T13:16:57.132378"
+      "last_seen": "2025-08-08T12:01:06.464648"
     },
     "123456": {
       "first_name": "Test User",

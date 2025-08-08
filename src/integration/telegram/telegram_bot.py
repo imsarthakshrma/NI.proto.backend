@@ -48,6 +48,18 @@ class NativeAIBot:
         
         logger.info(f"Native AI Bot initialized with Observer Agent: {self.observer_agent.agent_id}")
 
+    def get_greeting(self):
+        current_hour = datetime.now().hour
+            
+        if 5 <= current_hour < 12:
+            return "Good morning"
+        elif 12 <= current_hour < 17:
+            return "Good afternoon"
+        elif 17 <= current_hour < 22:
+            return "Good evening"
+        else:
+            return "Hello night owl"
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         user = update.effective_user
@@ -56,25 +68,7 @@ class NativeAIBot:
         logger.info(f"Start command from user {user.id} in chat {chat.id}")
 
         welcome_message = """
-        **Native AI Observer Bot**
-
-        I'm your intelligent business assistant that learns from your communication patterns.
-
-        What I do:
-        - Observe your messages and decisions
-        - Learn your communication style
-        - Identify automation opportunities
-        - Build business intelligence
-
-        **Commands:**
-        /start - Show this message
-        /status - Show learning status
-        /patterns - Show learned patterns
-        /help - Get help
-
-        **Privacy:** I only observe in authorized groups where I'm explicitly added.
-
-        Ready to start learning!
+        {self.get_greeting()} {user.first_name}, how can I assist you?
         """
 
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
