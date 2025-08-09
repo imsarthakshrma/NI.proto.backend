@@ -1,6 +1,6 @@
 """
-Decision Agent for Native AI
-Processes analyzer insights and makes strategic decisions for automation
+Decision Agent for Native IQ
+LLM-Powered Decision Agent - Processes analyzer insights and makes strategic decisions for automation
 """
 
 # import asyncio
@@ -11,6 +11,8 @@ from dataclasses import dataclass, field, asdict, is_dataclass
 # from collections import defaultdict
 
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,8 @@ class AutomationDecision:
     resource_requirements: Dict[str, Any]
     expected_roi: float
     justification: str
+    proactive_suggestion: bool = False  # Whether this should be suggested proactively
+    user_confirmation_required: bool = True  # Whether to ask user before executing
     created_at: datetime = field(default_factory=datetime.now)
 
 @dataclass
@@ -54,18 +58,25 @@ class BusinessImpact:
 
 class DecisionAgent(BaseAgent):
     """
-    Decision Agent - Makes strategic automation decisions based on Analyzer insights
+    LLM-Powered Decision Agent - Makes strategic automation decisions based on Analyzer insights
     
     Core Responsibilities:
-    - Evaluate automation opportunities from Analyzer
-    - Assess risks and business impact
+    - Evaluate automation opportunities from Analyzer using LLM intelligence
+    - Assess risks and business impact with contextual understanding
     - Make go/no-go decisions on automation implementations
-    - Prioritize automation initiatives
-    - Generate implementation recommendations
+    - Determine when to act proactively vs wait for user confirmation
+    - Generate implementation recommendations with timing
     """
 
     def __init__(self, agent_id: str = "decision_agent_001"):
         super().__init__(agent_id, "decision_agent", temperature=0.2) 
+
+        # Initialize LLM for intelligent decision making
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.1,  # Lower temperature for consistent decisions
+            max_tokens=1500
+        )
 
         self.decisions: Dict[str,  AutomationDecision] = {}
         self.risk_assessments: Dict[str, RiskAssessment] = {}
@@ -79,34 +90,35 @@ class DecisionAgent(BaseAgent):
 
         self.prioritized_implementations: List[Dict[str, Any]] = []
 
+        # Enhanced desires for proactive decision making
         self.desires = [
             Desire(
                 id="evaluate_opportunities",
-                goal="Evaluate automation opportunities for business value",
-                priority=9,
+                goal="Evaluate automation opportunities with LLM intelligence",
+                priority=10,
                 conditions={"has_analyzer_insights": True}
             ),
             Desire(
                 id="assess_risks",
-                goal="Assess risks for proposed automations",
-                priority=8,
+                goal="Assess implementation risks and business impact",
+                priority=9,
                 conditions={"has_opportunities": True}
             ),
             Desire(
                 id="make_decisions",
                 goal="Make strategic automation decisions",
-                priority=10,
-                conditions={"has_risk_assessment": True}
+                priority=8,
+                conditions={"has_risk_assessments": True}
             ),
             Desire(
-                id="prioritize_implementations",
-                goal="Prioritize automation implementations",
+                id="determine_proactivity",
+                goal="Decide when to act proactively vs ask user",
                 priority=7,
-                conditions={"has_approved_decisions": True}
+                conditions={"has_decisions": True}
             )
         ]
 
-        logger.info(f"Decision Agent initialized: {self.agent_id}")
+        logger.info(f"LLM-Powered Decision Agent initialized: {self.agent_id}")
 
     async def perceive(self, message: Dict[str, Any], context: Dict[str, Any]) -> List[Belief]:
         """Perceive phase - process analyzer insights"""
@@ -231,12 +243,12 @@ class DecisionAgent(BaseAgent):
                     parameters={"opportunities": opportunities}
                 ))
 
-            elif desire.id == "prioritize_implementations":
-                if "implementation_prioritization" not in existing_types:
+            elif desire.id == "determine_proactivity":
+                if "proactivity_determination" not in existing_types:
                     intentions.append(Intention(
-                    id=f"prioritize_implementations_{datetime.now().timestamp()}",
-                    desire_id="prioritize_implementations",
-                    action_type="implementation_prioritization",
+                    id=f"determine_proactivity_{datetime.now().timestamp()}",
+                    desire_id="determine_proactivity",
+                    action_type="proactivity_determination",
                     # priority=desire.priority,
                     parameters={"decisions": self.decisions}
                 ))
@@ -255,8 +267,8 @@ class DecisionAgent(BaseAgent):
                 result = await self._execute_risk_assessment(intention.parameters)
             elif intention.action_type == "decision_making":
                 result = await self._execute_decision_making(intention.parameters)
-            elif intention.action_type == "implementation_prioritization":
-                result = await self._execute_implementation_prioritization(intention.parameters)
+            elif intention.action_type == "proactivity_determination":
+                result = await self._execute_proactivity_determination(intention.parameters)
             
             result["action_taken"] = True
             logger.info(f"Decision Agent executed action: {intention.action_type}")
@@ -285,6 +297,307 @@ class DecisionAgent(BaseAgent):
             logger.error(f"Error in Decision Agent learning: {e}")
 
 
+    async def _make_automation_decisions(self, opportunities: List[Dict[str, Any]]) -> List[AutomationDecision]:
+        """LLM-powered decision making for automation opportunities"""
+        try:
+            if not opportunities:
+                return []
+
+            # Prepare opportunities for LLM analysis
+            opportunities_summary = self._prepare_opportunities_for_llm(opportunities)
+            
+            # LLM prompt for decision making
+            system_prompt = """You are an expert business automation decision maker. Analyze automation opportunities and make strategic go/no-go decisions.
+
+For each opportunity, decide:
+1. decision_type: approve, reject, defer, or modify
+2. priority: 1-10 (10 = highest priority)
+3. confidence: 0.0-1.0 confidence in this decision
+4. risk_level: low, medium, high
+5. implementation_timeline: immediate, short_term (1-2 weeks), long_term (1+ months)
+6. expected_roi: Expected return on investment (2.0 = 200% ROI)
+7. justification: Clear reasoning for the decision
+8. proactive_suggestion: true/false - Should Native suggest this proactively?
+9. user_confirmation_required: true/false - Ask user before executing?
+
+Decision Criteria:
+- APPROVE if: High frequency, significant time savings, low risk, clear ROI
+- DEFER if: Good opportunity but needs more data or resources
+- MODIFY if: Good concept but needs adjustments
+- REJECT if: Low value, high risk, or not feasible
+
+Proactive Suggestions Guidelines:
+- Suggest proactively for: Low-risk, high-frequency, proven patterns
+- Require confirmation for: Medium-risk, new automations, user-facing changes
+- Never suggest proactively: High-risk, complex, or sensitive operations
+
+Be conservative but practical. Focus on high-value, low-risk automations first."""
+
+            user_prompt = f"""Make decisions for these automation opportunities:
+
+{opportunities_summary}
+
+For each opportunity, provide a clear decision with reasoning. Focus on business value and implementation feasibility."""
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+
+            # Get LLM decision analysis
+            response = await self.llm.ainvoke(messages)
+            llm_analysis = response.content
+
+            # Parse LLM response into structured decisions
+            decisions = self._parse_automation_decisions(llm_analysis, opportunities)
+            
+            return decisions
+
+        except Exception as e:
+            logger.error(f"Error in LLM decision making: {e}")
+            return []
+
+    def _prepare_opportunities_for_llm(self, opportunities: List[Dict[str, Any]]) -> str:
+        """Prepare opportunities data for LLM decision analysis"""
+        try:
+            opportunities_text = "AUTOMATION OPPORTUNITIES FOR DECISION:\n\n"
+            
+            for i, opp in enumerate(opportunities, 1):
+                if isinstance(opp, dict) and 'opportunities' in opp:
+                    # Handle nested structure from analyzer
+                    for sub_opp in opp['opportunities']:
+                        opportunities_text += f"Opportunity {i}:\n"
+                        opportunities_text += f"Type: {sub_opp.get('type', 'Unknown')}\n"
+                        opportunities_text += f"Description: {sub_opp.get('description', 'No description')}\n"
+                        opportunities_text += f"Confidence: {sub_opp.get('confidence', 0.0):.2f}\n"
+                        opportunities_text += f"Potential Time Saved: {sub_opp.get('time_saved', 0)} minutes\n"
+                        opportunities_text += f"Frequency: Regular usage pattern\n"
+                        opportunities_text += "---\n"
+                else:
+                    # Handle direct opportunity structure
+                    opportunities_text += f"Opportunity {i}:\n"
+                    opportunities_text += f"Type: {opp.get('type', 'Unknown')}\n"
+                    opportunities_text += f"Description: {opp.get('description', 'No description')}\n"
+                    opportunities_text += f"Confidence: {opp.get('confidence', 0.0):.2f}\n"
+                    opportunities_text += f"Time Saved: {opp.get('time_saved', 0)} minutes\n"
+                    opportunities_text += "---\n"
+            
+            return opportunities_text
+            
+        except Exception as e:
+            logger.error(f"Error preparing opportunities for LLM: {e}")
+            return "No opportunities available for decision making."
+
+    def _parse_automation_decisions(self, llm_response: str, opportunities: List[Dict[str, Any]]) -> List[AutomationDecision]:
+        """Parse LLM response into structured AutomationDecision objects"""
+        decisions = []
+        
+        try:
+            # Simple parsing - in production, use structured output
+            lines = llm_response.split('\n')
+            current_decision = {}
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Look for decision markers
+                if 'decision' in line.lower() and ':' in line:
+                    if current_decision:
+                        # Save previous decision
+                        decision = self._create_decision_from_dict(current_decision, opportunities)
+                        if decision:
+                            decisions.append(decision)
+                    current_decision = {'description': line}
+                
+                elif 'decision_type:' in line.lower() or 'decision:' in line.lower():
+                    decision_type = line.split(':', 1)[1].strip().lower()
+                    current_decision['decision_type'] = decision_type
+                elif 'priority:' in line.lower():
+                    try:
+                        current_decision['priority'] = int(line.split(':', 1)[1].strip())
+                    except:
+                        current_decision['priority'] = 5
+                elif 'confidence:' in line.lower():
+                    try:
+                        current_decision['confidence'] = float(line.split(':', 1)[1].strip())
+                    except:
+                        current_decision['confidence'] = 0.7
+                elif 'risk_level:' in line.lower() or 'risk:' in line.lower():
+                    current_decision['risk_level'] = line.split(':', 1)[1].strip().lower()
+                elif 'timeline:' in line.lower():
+                    current_decision['timeline'] = line.split(':', 1)[1].strip().lower()
+                elif 'roi:' in line.lower():
+                    try:
+                        import re
+                        numbers = re.findall(r'\d+\.?\d*', line)
+                        if numbers:
+                            current_decision['roi'] = float(numbers[0])
+                    except:
+                        current_decision['roi'] = 2.0
+                elif 'proactive:' in line.lower():
+                    current_decision['proactive'] = 'true' in line.lower()
+                elif 'confirmation:' in line.lower():
+                    current_decision['confirmation'] = 'true' in line.lower()
+                elif 'justification:' in line.lower():
+                    current_decision['justification'] = line.split(':', 1)[1].strip()
+            
+            # Don't forget the last decision
+            if current_decision:
+                decision = self._create_decision_from_dict(current_decision, opportunities)
+                if decision:
+                    decisions.append(decision)
+                    
+        except Exception as e:
+            logger.error(f"Error parsing automation decisions: {e}")
+            
+        return decisions
+
+    def _create_decision_from_dict(self, decision_dict: Dict[str, Any], opportunities: List[Dict[str, Any]]) -> Optional[AutomationDecision]:
+        """Create AutomationDecision from parsed dictionary"""
+        try:
+            decision_id = f"decision_{datetime.now().timestamp()}"
+            opportunity_id = f"opp_{len(opportunities)}"  # Simple mapping
+            
+            return AutomationDecision(
+                decision_id=decision_id,
+                opportunity_id=opportunity_id,
+                decision_type=decision_dict.get('decision_type', 'defer'),
+                priority=decision_dict.get('priority', 5),
+                confidence=decision_dict.get('confidence', 0.7),
+                risk_level=decision_dict.get('risk_level', 'medium'),
+                implementation_timeline=decision_dict.get('timeline', 'short_term'),
+                resource_requirements={'time': 'low', 'complexity': 'medium'},
+                expected_roi=decision_dict.get('roi', 2.0),
+                justification=decision_dict.get('justification', 'LLM-based decision'),
+                proactive_suggestion=decision_dict.get('proactive', False),
+                user_confirmation_required=decision_dict.get('confirmation', True)
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating decision: {e}")
+            return None
+
+    async def _execute_opportunity_evaluation(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute opportunity evaluation process"""
+        try:
+            opportunities = parameters.get("opportunities", [])
+            results = {
+                "opportunities_evaluated": 0,
+                "high_value_opportunities": 0,
+                "evaluation_results": []
+            }
+            
+            for opportunity in opportunities:
+                # Process each opportunity
+                belief = await self._process_opportunity(opportunity)
+                if belief:
+                    results["opportunities_evaluated"] += 1
+                    if belief.content.get("analyzer_confidence", 0) > 0.7:
+                        results["high_value_opportunities"] += 1
+                    results["evaluation_results"].append(belief.content)
+            
+            logger.info(f"Evaluated {results['opportunities_evaluated']} opportunities")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in opportunity evaluation: {e}")
+            return {"opportunities_evaluated": 0, "error": str(e)}
+
+    async def _execute_risk_assessment(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute risk assessment process"""
+        try:
+            opportunities = parameters.get("opportunities", [])
+            results = {
+                "risks_assessed": 0,
+                "high_risk_count": 0,
+                "risk_assessments": []
+            }
+            
+            for opportunity in opportunities:
+                risk_assessment = await self._assess_initial_risk(opportunity)
+                if risk_assessment:
+                    results["risks_assessed"] += 1
+                    if risk_assessment.get("overall_risk_score", 0) > 0.6:
+                        results["high_risk_count"] += 1
+                    results["risk_assessments"].append(risk_assessment)
+            
+            logger.info(f"Assessed risks for {results['risks_assessed']} opportunities")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in risk assessment: {e}")
+            return {"risks_assessed": 0, "error": str(e)}
+
+    async def _execute_decision_making(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute decision making process - creates decisions based on evaluations and risk assessments"""
+        try:
+            # Production confidence threshold (temporarily lowered for testing)
+            PRODUCTION_CONFIDENCE_THRESHOLD = 0.3  # Will be 0.75 in production
+            
+            results = {
+                "decisions_made": 0,
+                "approved_decisions": 0,
+                "rejected_decisions": 0,
+                "deferred_decisions": 0
+            }
+            
+            # Get evaluated opportunities from parameters or beliefs
+            opportunities = parameters.get("opportunities", [])
+            if not opportunities:
+                # Fallback to beliefs if no opportunities in parameters
+                opportunity_beliefs = [b for b in self.beliefs if "opportunity_analysis" in b.id]
+                opportunities = [b.content for b in opportunity_beliefs]
+            
+            decisions = await self._make_automation_decisions(opportunities)
+            
+            for decision in decisions:
+                # Store decision
+                self.decisions[decision.decision_id] = decision
+                results["decisions_made"] += 1
+                
+                if decision.decision_type == "approve":
+                    results["approved_decisions"] += 1
+                elif decision.decision_type == "reject":
+                    results["rejected_decisions"] += 1
+                else:
+                    results["deferred_decisions"] += 1
+                
+                logger.info(f"Decision made: {decision.decision_type} for opportunity {decision.opportunity_id} (confidence: {decision.confidence:.2f})")
+            
+            logger.info(f"Decision making completed: {results['decisions_made']} decisions made")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in decision making: {e}")
+            return {"decisions_made": 0, "error": str(e)}
+
+    async def _execute_proactivity_determination(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Determine proactivity for decisions"""
+        try:
+            decisions = parameters.get("decisions", [])
+            results = {
+                "proactivity_determined": 0,
+                "proactive_suggestions": 0,
+                "user_confirmation_required": 0
+            }
+            
+            for decision in decisions:
+                if decision.proactive_suggestion:
+                    results["proactive_suggestions"] += 1
+                if decision.user_confirmation_required:
+                    results["user_confirmation_required"] += 1
+                
+                results["proactivity_determined"] += 1
+            
+            logger.info(f"Proactivity determined for {results['proactivity_determined']} decisions")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in proactivity determination: {e}")
+            return {"proactivity_determined": 0, "error": str(e)}
+
     async def _process_opportunity(self, opportunity) -> Optional[Belief]:
         """Process opportunity and generate belief"""
         try:
@@ -304,22 +617,6 @@ class DecisionAgent(BaseAgent):
                 "analyzer_confidence": opp_dict.get("confidence", 0.0)
             }
 
-            # --- Decision creation logic for integration test ---
-            # decision_type = "approve" if opportunity_analysis["analyzer_confidence"] > 0.2 else "reject"
-            # decision = AutomationDecision(
-            #     decision_id=f"decision_{datetime.now().timestamp()}",
-            #     opportunity_id=opp_id,
-            #     decision_type=decision_type,
-            #     priority=8 if decision_type == "approve" else 3,
-            #     confidence=opportunity_analysis["analyzer_confidence"],
-            #     risk_level="low",  # Or use a real risk assessment if available
-            #     implementation_timeline="short_term" if decision_type == "approve" else "deferred",
-            #     resource_requirements={"budget": 5000, "team_size": 2, "timeline_weeks": 4},
-            #     expected_roi=1.5,  # Or calculate if you have data
-            #     justification="Auto-approved for prototype"
-            # )
-            # self.decisions[decision.decision_id] = decision
-
             return Belief(
                 id=f"opportunity_analysis_{datetime.now().timestamp()}",
                 type=BeliefType.KNOWLEDGE,
@@ -327,10 +624,10 @@ class DecisionAgent(BaseAgent):
                 confidence=0.8,
                 source="decision_agent"
             )
+            
         except Exception as e:
             logger.error(f"Error processing opportunity: {e}")
-        return None
-
+            return None
 
     async def _process_insight(self, insight: Any) -> Optional[Belief]:
         """Process business insight from Analyzer"""
@@ -423,9 +720,17 @@ class DecisionAgent(BaseAgent):
         elif "communication" in automation_type.lower():
             impact["quality_improvement_percentage"] = 15
         
-        return impact
+        return BusinessImpact(
+            impact_id=f"impact_{datetime.now().timestamp()}",
+            impact_type="time_savings",
+            quantified_value=impact["time_savings_hours_per_week"],
+            measurement_unit="hours",
+            affected_processes=[],
+            stakeholders=[],
+            confidence=0.8
+        )
 
-    async def _assess_initial_risk(self, opportunity: Dict[str, Any]) -> Optional[BusinessImpact]:
+    async def _assess_initial_risk(self, opportunity: Dict[str, Any]) -> Optional[RiskAssessment]:
         """Assess initial risk for automation opportunity"""
 
         risk = {
@@ -450,7 +755,15 @@ class DecisionAgent(BaseAgent):
             risk["business_disruption"] = "medium"
             risk["overall_risk_score"] = 0.7
         
-        return risk
+        return RiskAssessment(
+            risk_id=f"risk_{datetime.now().timestamp()}",
+            risk_type="initial_risk",
+            severity="low",
+            probability=risk["overall_risk_score"],
+            impact="low",
+            mitigation_strategy="",
+            confidence=0.8
+        )
 
     async def _execute_implementation_prioritization(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute implementation prioritization for approved decisions"""
@@ -536,344 +849,6 @@ class DecisionAgent(BaseAgent):
             return []
         
         return self.prioritized_implementations[:limit]
-
-    async def _execute_opportunity_evaluation(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute opportunity evaluation process"""
-        try:
-            opportunities = parameters.get("opportunities", [])
-            results = {
-                "opportunities_evaluated": 0,
-                "high_value_opportunities": 0,
-                "evaluation_results": []
-            }
-            
-            for opportunity in opportunities:
-                # Process each opportunity
-                belief = await self._process_opportunity(opportunity)
-                if belief:
-                    results["opportunities_evaluated"] += 1
-                    if belief.content.get("analyzer_confidence", 0) > 0.7:
-                        results["high_value_opportunities"] += 1
-                    results["evaluation_results"].append(belief.content)
-            
-            logger.info(f"Evaluated {results['opportunities_evaluated']} opportunities")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in opportunity evaluation: {e}")
-            return {"opportunities_evaluated": 0, "error": str(e)}
-
-    async def _execute_risk_assessment(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute risk assessment process"""
-        try:
-            opportunities = parameters.get("opportunities", [])
-            results = {
-                "risks_assessed": 0,
-                "high_risk_count": 0,
-                "risk_assessments": []
-            }
-            
-            for opportunity in opportunities:
-                risk_assessment = await self._assess_initial_risk(opportunity)
-                if risk_assessment:
-                    results["risks_assessed"] += 1
-                    if risk_assessment.get("overall_risk_score", 0) > 0.6:
-                        results["high_risk_count"] += 1
-                    results["risk_assessments"].append(risk_assessment)
-            
-            logger.info(f"Assessed risks for {results['risks_assessed']} opportunities")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in risk assessment: {e}")
-            return {"risks_assessed": 0, "error": str(e)}
-
-    async def _execute_decision_making(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute decision making process - creates decisions based on evaluations and risk assessments"""
-        try:
-            # Production confidence threshold (temporarily lowered for testing)
-            PRODUCTION_CONFIDENCE_THRESHOLD = 0.3  # Will be 0.75 in production
-            
-            results = {
-                "decisions_made": 0,
-                "approved_decisions": 0,
-                "rejected_decisions": 0,
-                "deferred_decisions": 0
-            }
-            
-            # Get evaluated opportunities from parameters or beliefs
-            opportunities = parameters.get("opportunities", [])
-            if not opportunities:
-                # Fallback to beliefs if no opportunities in parameters
-                opportunity_beliefs = [b for b in self.beliefs if "opportunity_analysis" in b.id]
-                opportunities = [b.content for b in opportunity_beliefs]
-            
-            for opportunity_analysis in opportunities:
-                # Handle both dict and belief content
-                if hasattr(opportunity_analysis, 'content'):
-                    opportunity_analysis = opportunity_analysis.content
-                
-                analyzer_confidence = opportunity_analysis.get("analyzer_confidence", 0.0)
-                opp_id = opportunity_analysis.get("opportunity_id", "unknown")
-                
-                # Decision logic based on confidence threshold
-                if analyzer_confidence >= PRODUCTION_CONFIDENCE_THRESHOLD:
-                    decision_type = "approve"
-                    priority = 9
-                    implementation_timeline = "short_term"
-                    justification = f"High confidence automation opportunity (confidence: {analyzer_confidence:.2f})"
-                elif analyzer_confidence >= 0.2:  # Lower threshold for moderate confidence
-                    decision_type = "defer"
-                    priority = 5
-                    implementation_timeline = "medium_term"
-                    justification = f"Moderate confidence - requires further evaluation (confidence: {analyzer_confidence:.2f})"
-                else:
-                    decision_type = "reject"
-                    priority = 2
-                    implementation_timeline = "not_planned"
-                    justification = f"Low confidence automation opportunity (confidence: {analyzer_confidence:.2f})"
-                
-                # Create decision
-                decision = AutomationDecision(
-                    decision_id=f"decision_{datetime.now().timestamp()}",
-                    opportunity_id=opp_id,
-                    decision_type=decision_type,
-                    priority=priority,
-                    confidence=analyzer_confidence,
-                    risk_level="low" if analyzer_confidence > 0.8 else "medium" if analyzer_confidence > 0.6 else "high",
-                    implementation_timeline=implementation_timeline,
-                    resource_requirements={
-                        "budget": 5000 if decision_type == "approve" else 2000,
-                        "team_size": 2 if decision_type == "approve" else 1,
-                        "timeline_weeks": 4 if decision_type == "approve" else 8
-                    },
-                    expected_roi=1.5 if decision_type == "approve" else 1.0,
-                    justification=justification
-                )
-                
-                # Store decision
-                self.decisions[decision.decision_id] = decision
-                results["decisions_made"] += 1
-                
-                if decision_type == "approve":
-                    results["approved_decisions"] += 1
-                elif decision_type == "reject":
-                    results["rejected_decisions"] += 1
-                else:
-                    results["deferred_decisions"] += 1
-                
-                logger.info(f"Decision made: {decision_type} for opportunity {opp_id} (confidence: {analyzer_confidence:.2f})")
-            
-            logger.info(f"Decision making completed: {results['decisions_made']} decisions made")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in decision making: {e}")
-            return {"decisions_made": 0, "error": str(e)}
-
-    def _adjust_confidence_threshold(self, success_rate: float):
-        """Adjust confidence threshold based on decision success rate"""
-
-        if success_rate < 0.5:  # less than 50% success
-            self.min_confidence_threshold = min(0.9, self.min_confidence_threshold + 0.05)
-        elif success_rate > 0.8:  # greater than 80% success  
-            self.min_confidence_threshold = max(0.3, self.min_confidence_threshold - 0.05)
-        
-        logger.info(f"Adjusted confidence threshold to {self.min_confidence_threshold} based on {success_rate} success rate")
-
-    async def _update_decision_confidence(self, belief: Belief) -> None:
-        """Update decision confidence based on feedback"""
-        try:
-            # extract key information from the belief
-            belief_content = belief.content if hasattr(belief, 'content') else ""
-            
-            # update confidence based on belief type and content
-            if "success" in belief_content or "approved" in belief_content:
-                # positive outcome - increase confidence in similar decisions
-                self._boost_confidence_for_similar_decisions(belief)
-                
-            elif "failed" in belief_content or "rejected" in belief_content:
-                # negative outcome - decrease confidence 
-                self._reduce_confidence_for_similar_decisions(belief)
-                
-            elif "risk" in belief_content:
-                # risk-related knowledge - update risk assessment confidence
-                await self._update_risk_assessment_confidence(belief)
-                
-            elif "roi" in belief_content or "return" in belief_content:
-                # ROI-related knowledge - update financial projections confidence
-                await self._update_roi_confidence(belief)
-                
-            # store the learning for future reference
-            self._store_learning_history(belief)
-            
-            logger.info(f"Updated decision confidence based on belief: {belief.id}")
-            
-        except Exception as e:
-            logger.error(f"Error updating decision confidence: {e}")
-
-    def _boost_confidence_for_similar_decisions(self, belief: Belief) -> None:
-        """Increase confidence for decisions similar to successful ones"""
-        # Increase base confidence slightly
-        if hasattr(self, 'base_confidence'):
-            self.base_confidence = min(1.0, self.base_confidence + 0.05)
-        
-        # Track successful decision patterns
-        if not hasattr(self, 'successful_patterns'):
-            self.successful_patterns = []
-        
-        pattern = {
-            'belief_type': belief.type,
-            'confidence': belief.confidence,
-            'timestamp': datetime.now(),
-            'outcome': 'success'
-        }
-        self.successful_patterns.append(pattern)
-        
-        # Keep only recent patterns (last 50)
-        self.successful_patterns = self.successful_patterns[-50:]
-
-    def _reduce_confidence_for_similar_decisions(self, belief: Belief) -> None:
-        """Decrease confidence for decisions similar to failed ones"""
-        # Decrease base confidence slightly
-        if hasattr(self, 'base_confidence'):
-            self.base_confidence = max(0.1, self.base_confidence - 0.1)
-        
-        # Track failed decision patterns
-        if not hasattr(self, 'failed_patterns'):
-            self.failed_patterns = []
-        
-        pattern = {
-            'belief_type': belief.type,
-            'confidence': belief.confidence,
-            'timestamp': datetime.now(),
-            'outcome': 'failure'
-        }
-        self.failed_patterns.append(pattern)
-        
-        # Keep only recent patterns (last 50)
-        self.failed_patterns = self.failed_patterns[-50:]
-
-    async def _update_risk_assessment_confidence(self, belief: Belief) -> None:
-        """Update confidence in risk assessments based on outcomes"""
-        try:
-            # Initialize risk confidence tracking if needed
-            if not hasattr(self, 'risk_confidence_history'):
-                self.risk_confidence_history = []
-            
-            # Determine if risk assessment was accurate
-            risk_accuracy = self._calculate_risk_accuracy(belief)
-            
-            # Adjust risk assessment confidence
-            if not hasattr(self, 'risk_assessment_confidence'):
-                self.risk_assessment_confidence = 0.7  # Default
-                
-            if risk_accuracy > 0.8:
-                self.risk_assessment_confidence = min(1.0, self.risk_assessment_confidence + 0.05)
-            elif risk_accuracy < 0.4:
-                self.risk_assessment_confidence = max(0.2, self.risk_assessment_confidence - 0.1)
-            
-            # Store history
-            self.risk_confidence_history.append({
-                'accuracy': risk_accuracy,
-                'confidence': self.risk_assessment_confidence,
-                'timestamp': datetime.now()
-            })
-            
-            logger.info(f"Updated risk assessment confidence to {self.risk_assessment_confidence}")
-            
-        except Exception as e:
-            logger.error(f"Error updating risk assessment confidence: {e}")
-
-    async def _update_roi_confidence(self, belief: Belief) -> None:
-        """Update confidence in ROI predictions based on actual outcomes"""
-        try:
-            # Initialize ROI confidence tracking if needed
-            if not hasattr(self, 'roi_confidence_history'):
-                self.roi_confidence_history = []
-            
-            # Calculate ROI prediction accuracy
-            roi_accuracy = self._calculate_roi_accuracy(belief)
-            
-            # Adjust ROI prediction confidence
-            if not hasattr(self, 'roi_prediction_confidence'):
-                self.roi_prediction_confidence = 0.6  # Default
-                
-            if roi_accuracy > 0.9:
-                self.roi_prediction_confidence = min(1.0, self.roi_prediction_confidence + 0.03)
-            elif roi_accuracy < 0.5:
-                self.roi_prediction_confidence = max(0.2, self.roi_prediction_confidence - 0.08)
-            
-            # Store history
-            self.roi_confidence_history.append({
-                'accuracy': roi_accuracy,
-                'confidence': self.roi_prediction_confidence,
-                'timestamp': datetime.now()
-            })
-            
-            logger.info(f"Updated ROI prediction confidence to {self.roi_prediction_confidence}")
-            
-        except Exception as e:
-            logger.error(f"Error updating ROI confidence: {e}")
-
-    def _calculate_risk_accuracy(self, belief: Belief) -> float:
-        """Calculate how accurate our risk assessment was"""
-        # Simplified implementation - you'd customize based on your belief structure
-        try:
-            # Extract predicted vs actual risk from belief content
-            content = belief.content
-            if isinstance(content, dict):
-                predicted_risk = content.get('predicted_risk', 0.5)
-                actual_risk = content.get('actual_risk', 0.5)
-                
-                # Calculate accuracy (how close prediction was to reality)
-                diff = abs(predicted_risk - actual_risk)
-                accuracy = max(0.0, 1.0 - diff)
-                return accuracy
-            
-            # fallback: assume moderate accuracy if no risk data
-            return 0.6
-            
-        except Exception:
-            return 0.5  # Default moderate accuracy
-
-    def _calculate_roi_accuracy(self, belief: Belief) -> float:
-        """Calculate how accurate our ROI prediction was"""
-        try:
-            # extract predicted vs actual ROI from belief content
-            content = belief.content
-            if isinstance(content, dict):
-                predicted_roi = content.get('predicted_roi', 1.0)
-                actual_roi = content.get('actual_roi', 1.0)
-                
-                # Calculate accuracy (how close prediction was to reality)
-                diff = abs(predicted_roi - actual_roi) / max(predicted_roi, actual_roi, 0.1)
-                accuracy = max(0.0, 1.0 - diff)
-                return accuracy
-            
-            # fallback: assume moderate accuracy if no ROI data
-            return 0.6
-            
-        except Exception:
-            return 0.5  # default moderate accuracy
-
-    def _store_learning_history(self, belief: Belief) -> None:
-        """Store learning history for analysis"""
-        if not hasattr(self, 'learning_history'):
-            self.learning_history = []
-        
-        learning_record = {
-            'belief_id': belief.id,
-            'belief_type': belief.type,
-            'confidence': belief.confidence,
-            'timestamp': datetime.now(),
-            'learning_applied': True
-        }
-        
-        self.learning_history.append(learning_record)
-        
-        # Keep only recent history (last 100 records)
-        self.learning_history = self.learning_history[-100:]
 
     def get_decision_summary(self) -> Dict[str, Any]:
         """Get decision summary for reporting"""

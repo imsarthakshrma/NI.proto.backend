@@ -1,5 +1,5 @@
 """
-Telegram Message Processor for DELA AI
+Telegram Message Processor for Native IQ
 Converts Telegram messages to Observer Agent input format
 """
 

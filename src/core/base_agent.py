@@ -118,7 +118,7 @@ class AgentState(TypedDict):
 class BaseAgent(ABC):
     """
     Base BDI Agent class integrated with LangGraph
-    Provides the foundation for all DELA AI agents
+    Provides the foundation for all Native IQ agents
     """
 
     def __init__(

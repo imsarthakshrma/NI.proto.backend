@@ -1,5 +1,5 @@
 """
-Advanced Integration Test for Native AI System
+Advanced Integration Test for Native IQ System
 Tests Observer → Analyzer → Decision → Execution → Calendar Tool with Complex Scenarios
 """
 
@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Native AI imports
+# Native IQ imports
 from src.domains.agents.observer.ob_agent import ObserverAgent
 from src.domains.agents.analyzer.analyzer_agent import AnalyzerAgent
 from src.domains.agents.decision.decision_agent import DecisionAgent
@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class NativeAdvancedIntegrationTest:
-    """Advanced Native AI integration test with complete 4-agent workflow"""
+    """Advanced Native IQ integration test with complete 4-agent workflow"""
 
     def __init__(self):
         self.observer_agent = None
@@ -120,7 +120,7 @@ class NativeAdvancedIntegrationTest:
     async def setup_agents(self):
         """Initialize all 4 agents"""
         try:
-            print("🤖 Initializing Native AI 4-Agent System...")
+            print("🤖 Initializing Native IQ 4-Agent System...")
             
             # Initialize Observer Agent
             self.observer_agent = ObserverAgent(agent_id="advanced_observer_001")
@@ -324,7 +324,7 @@ class NativeAdvancedIntegrationTest:
             # Test meeting scheduling through Execution Agent
             meeting_params = {
                 "decision_id": "test_meeting_decision",
-                "title": "Native AI Integration Test Meeting",
+                "title": "Native IQ Integration Test Meeting",
                 "duration": 30,
                 "attendees": ["test@example.com", "demo@example.com"]
             }
@@ -344,7 +344,7 @@ class NativeAdvancedIntegrationTest:
             return False
 
     async def run(self):
-        print("🚀 Starting Native AI Advanced 4-Agent Integration Test")
+        print("🚀 Starting Native IQ Advanced 4-Agent Integration Test")
         print("=" * 60)
         await self.setup_agents()
         auto_success = await self.test_automation_detection()
@@ -356,10 +356,10 @@ class NativeAdvancedIntegrationTest:
         overall_success = auto_success and calendar_success
         
         if overall_success:
-            print("\n🎉 Native AI 4-Agent Integration Test: SUCCESS")
+            print("\n🎉 Native IQ 4-Agent Integration Test: SUCCESS")
             print("🚀 Complete Observer → Analyzer → Decision → Execution → Calendar workflow functional!")
         else:
-            print("\n⚠️ Native AI 4-Agent Integration Test: NEEDS ATTENTION")
+            print("\n⚠️ Native IQ 4-Agent Integration Test: NEEDS ATTENTION")
 
 if __name__ == "__main__":
     asyncio.run(NativeAdvancedIntegrationTest().run())
