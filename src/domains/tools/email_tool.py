@@ -36,7 +36,7 @@ class SendEmailTool(BaseTool):
     html_body: Optional[str] = Field(description="HTML email body (optional)", default="")
     attachments: Optional[List[str]] = Field(description="Attachments (optional)", default=None)
     sender: Optional[str] = Field(description="Sender (optional)", default="")
-    on_behalf_of: Optional[str] = Field(description="Native AI on behalf of (username)", default="")
+    on_behalf_of: Optional[str] = Field(description="Native IQ on behalf of (username)", default="")
 
 
 class EmailService:
@@ -45,7 +45,7 @@ class EmailService:
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.sender_email = os.getenv('SMTP_EMAIL')
         self.sender_password = os.getenv('SMTP_PASSWORD')
-        self.sender_name = os.getenv('SMTP_SENDER_NAME', 'Native AI')
+        self.sender_name = os.getenv('SMTP_SENDER_NAME', 'Native IQ')
     
     def send_email(self, email: EmailDetails) -> Dict[str, Any]:
         try:
@@ -76,7 +76,7 @@ class EmailService:
             # signature to body if on_behalf_of is provided
             body_content = email.body
             if email.on_behalf_of:
-                signature = f"\n\n{email.on_behalf_of}\n\nNative AI on behalf of {email.on_behalf_of}"
+                signature = f"\n\n{email.on_behalf_of}\n\nNative IQ on behalf of {email.on_behalf_of}"
                 body_content = f"{email.body}{signature}"
             
             # Add body
@@ -84,7 +84,7 @@ class EmailService:
                 # Also modify HTML body if provided
                 html_content = email.html_body
                 if email.on_behalf_of:
-                    html_signature = f"<br><br><strong>{email.on_behalf_of}</strong><br><br><em>Native AI on behalf of {email.on_behalf_of}</em>"
+                    html_signature = f"<br><br><strong>{email.on_behalf_of}</strong><br><br><em>Native IQ on behalf of {email.on_behalf_of}</em>"
                     html_content = f"{email.html_body}{html_signature}"
                 
                 text_part = MIMEText(body_content, 'plain')
@@ -167,7 +167,7 @@ def send_email(
         html_body: Optional HTML body of the email (optional)
         attachments: Optional attachments (optional)
         sender: Optional sender (optional)
-        on_behalf_of: Native AI on behalf of (username)
+        on_behalf_of: Native IQ on behalf of (username)
     """
     try:
         email_details = EmailDetails(

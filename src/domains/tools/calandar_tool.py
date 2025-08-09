@@ -1,5 +1,5 @@
 """
-Google Calendar Integration Tool for DELA AI
+Google Calendar Integration Tool for Native IQ
 Handles calendar operations and meeting scheduling
 """
 
@@ -449,5 +449,5 @@ CALENDAR_TOOLS = [
 ]
 
 def get_calendar_tools():
-    """Get calendar tools."""
+    """Return the list of calendar tools."""
     return CALENDAR_TOOLS

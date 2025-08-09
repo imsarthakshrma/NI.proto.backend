@@ -1,5 +1,5 @@
 """
-Test script to verify Native AI can actually execute tasks, not just respond conversationally
+Test script to verify Native IQ can actually execute tasks, not just respond conversationally
 """
 
 import asyncio
@@ -16,9 +16,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def test_task_execution():
-    """Test that Native AI actually executes tasks through DELA pipeline"""
+    """Test that Native IQ actually executes tasks through DELA pipeline"""
     
-    print("🚀 Testing Native AI Task Execution...")
+    print("🚀 Testing Native IQ Task Execution...")
     print("=" * 50)
     
     # Import after setting up environment
@@ -148,7 +148,7 @@ async def test_task_execution():
         print("📊 SUMMARY:")
         print("✅ Conversational messages → ProactiveCommunicationAgent")
         print("✅ Task requests → DELA Pipeline (Observer → Analyzer → Decision → Execution)")
-        print("🚀 Native AI now ACTUALLY EXECUTES TASKS instead of just talking about them!")
+        print("🚀 Native IQ now ACTUALLY EXECUTES TASKS instead of just talking about them!")
         
     except Exception as e:
         print(f"❌ Error during testing: {e}")

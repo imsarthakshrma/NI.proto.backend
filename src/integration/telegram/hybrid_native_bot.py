@@ -1,12 +1,11 @@
 """
-Hybrid Native AI Telegram Bot
+Hybrid Native IQ Telegram Bot
 Combines silent learning with interactive chat capabilities
 """
 
-import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -22,6 +21,7 @@ from src.domains.agents.communication.proactive_agent import ProactiveCommunicat
 from src.domains.agents.conversation.proactive_conversation_engine import ProactiveConversationEngine, ProactiveScheduler, ConversationTrigger
 from src.integration.telegram.message_processor import TelegramMessageProcessor
 from src.integration.telegram.auth_handler import TelegramAuthHandler as AuthHandler
+from telegram.constants import ChatAction
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class ConversationMemory:
 
 class HybridNativeAI:
     """
-    Native AI with dual learning modes:
+    Native IQ with dual learning modes:
     1. Silent Learning: Observes conversations without responding
     2. Interactive Chat: Direct conversation with users for automation
     """
@@ -129,6 +129,9 @@ class HybridNativeAI:
         # Conversation memory
         self.conversation_memory = ConversationMemory()
         
+        # Telegram chat action for typing indicator
+        self.chat_action = ChatAction.TYPING
+        
         # Native's capabilities - what Native knows it can do
         self.capabilities = {
             "automation": {
@@ -158,7 +161,85 @@ class HybridNativeAI:
             }
         }
         
-        logger.info("🤖 Hybrid Native AI initialized with dual learning modes")
+        logger.info("🤖 Hybrid Native IQ initialized with dual learning modes")
+
+    async def _execute_task_request(self, update: Update, message_text: str, context: Dict[str, Any]) -> str:
+        """Execute task requests directly using LLM-powered ExecutionAgent"""
+        try:
+            user_id = str(update.effective_user.id)
+            logger.info(f"🔧 Executing task request directly with LLM: {message_text}")
+            
+            # Create execution context with user message
+            execution_context = {
+                **context,
+                "user_id": user_id,
+                "user_message": message_text,
+                "direct_execution": True
+            }
+            
+            # Create a dummy intention for the ExecutionAgent
+            from src.core.base_agent import Intention
+            intention = Intention(
+                action_type="execute_user_request",
+                parameters={"user_message": message_text}
+            )
+            
+            # Call ExecutionAgent directly with LLM-powered execution
+            logger.info(f"🚀 Calling ExecutionAgent directly for LLM analysis")
+            execution_result = await self.execution_agent.act(intention, execution_context)
+            logger.info(f"Direct execution result: {execution_result}")
+            
+            # Check if execution was successful and return appropriate response
+            if execution_result.get("requires_permission"):
+                # Send permission request to user
+                permission_msg = execution_result.get("permission_message", "Should I proceed?")
+                await update.message.reply_text(permission_msg)
+                return "Permission requested - please confirm to proceed."
+            elif execution_result.get("success"):
+                # Task executed successfully - format the result
+                return await self._format_execution_result(execution_result, message_text)
+            else:
+                error_msg = execution_result.get("error", "Unknown error occurred")
+                return f"❌ I couldn't complete that task: {error_msg}"
+                
+        except Exception as e:
+            logger.error(f"Error in direct LLM execution: {e}", exc_info=True)
+            return f"❌ Sorry, I encountered an error while processing your request: {str(e)}"
+
+    async def _format_execution_result(self, result: Dict[str, Any], original_request: str) -> str:
+        """Format execution results into user-friendly messages"""
+        try:
+            # Check if LLM already formatted the response
+            if result.get("llm_powered") and result.get("formatted_response"):
+                logger.info("Using LLM-formatted response")
+                return result["formatted_response"]
+            
+            # Fallback to basic formatting for non-LLM results
+            tool_result = result.get("result", "")
+            task_type = result.get("task_type", "")
+            
+            if task_type == "get_upcoming_meetings":
+                if "No upcoming meetings" in str(tool_result):
+                    return f"📅 I checked your calendar and you don't have any meetings scheduled for tomorrow. Would you like me to schedule something?"
+                else:
+                    return f"📅 Here's your schedule for tomorrow:\n\n{tool_result}\n\nWould you like me to schedule anything else?"
+            
+            elif task_type == "schedule_meeting":
+                return f"✅ Meeting scheduled successfully! {tool_result}"
+            
+            elif task_type == "list_drive_files":
+                return f"📁 Here are your Google Drive files:\n\n{tool_result}"
+            
+            elif task_type == "send_email":
+                return f"📧 Email sent successfully! {tool_result}"
+            
+            else:
+                # Generic success message
+                return f"✅ Task completed successfully!\n\n{tool_result}"
+                
+        except Exception as e:
+            logger.error(f"Error formatting execution result: {e}")
+            return f"✅ Task completed, but I had trouble formatting the response: {str(result)}"
 
     def get_greeting(self):
         current_hour = datetime.now().hour
@@ -367,6 +448,14 @@ class HybridNativeAI:
         else:
             await self._handle_silent_learning(update, context)
 
+    async def _show_typing(self, update: Update):
+        """Show the 'typing...' indicator in Telegram."""
+        chat_id = update.effective_chat.id
+        await update.get_bot().send_chat_action(
+            chat_id=chat_id,
+            action=self.chat_action
+        )
+
     async def _handle_conversational_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle conversational messages like JARVIS - natural and intelligent"""
         user = update.effective_user
@@ -409,17 +498,22 @@ class HybridNativeAI:
         user_message = HumanMessage(content=message_text)
         
         # Check if this is a task request that needs actual execution
-        task_keywords = ['schedule', 'book', 'create', 'send', 'automate', 'set up', 'remind', 'follow up', 'execute', 'do', 'make', 'call', 'email']
-        is_task_request = any(keyword in message_text.lower() for keyword in task_keywords)
+        task_keywords = ['schedule', 'book', 'create', 'send', 'automate', 'set up', 'remind', 'follow up', 'execute', 'do', 'make', 'call', 'email', 'check', 'show', 'list', 'find', 'get']
+        calendar_keywords = ['calendar', 'meeting', 'appointment', 'schedule']
         
-        if is_task_request:
+        # Detect calendar/task requests
+        is_task_request = any(keyword in message_text.lower() for keyword in task_keywords)
+        is_calendar_request = any(keyword in message_text.lower() for keyword in calendar_keywords)
+        
+        # If it's a calendar request, treat as task regardless of other keywords
+        if is_calendar_request or is_task_request:
             # logger.info(f"🔧 Task request detected: {message_text}")
             # Show typing again for longer processing
             await self._show_typing(update)
             # Route to DELA pipeline for actual task execution
-            await self._execute_task_request(update, message_text, rich_context)
+            execution_result = await self._execute_task_request(update, message_text, rich_context)
             response_sent = True
-            native_response = "Task processing initiated"
+            native_response = execution_result
         else:
             # logger.info(f"💬 Conversational message detected: {message_text}")
             # Use proactive agent to generate natural response
@@ -478,114 +572,7 @@ class HybridNativeAI:
         
         self.interactive_conversations += 1
 
-    async def _execute_task_request(self, update: Update, request_text: str, context: Dict[str, Any]):
-        """Execute actual tasks through the DELA pipeline"""
-        try:
-            user = update.effective_user
-            logger.info(f"🚀 Executing task request: {request_text}")
-            
-            # show typing and send immediate acknowledgment
-            await self._show_typing(update)
-            await update.message.reply_text(f"🚀 **Processing your request...**\n\n*{request_text}*\n\nI'm routing this through my automation pipeline to actually execute it.", parse_mode='Markdown')
-            
-            # convert to BaseMessage for DELA pipeline
-            from langchain_core.messages import HumanMessage
-            message = HumanMessage(content=request_text)
-            
-            # create context for task execution
-            task_context = {
-                "message_type": "task_execution",
-                "user": user.first_name,
-                "user_id": user.id,
-                "priority": "high",
-                "source": "telegram_task_request",
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            # show typing during processing
-            await self._show_typing(update)
-            
-            # run through DELA pipeline for actual execution
-            logger.info(f"🔍 Step 1: Observer Agent processing...")
-            observer_beliefs = await self.observer_agent.perceive([message], task_context)
-            
-            await self._show_typing(update)
-            
-            logger.info(f"🔍 Step 2: Analyzer Agent processing...")
-            analyzer_beliefs = await self.analyzer_agent.perceive(observer_beliefs, task_context)
-            analyzer_desires = await self.analyzer_agent.update_desires(analyzer_beliefs, task_context)
-            analyzer_intentions = await self.analyzer_agent.deliberate(analyzer_beliefs, analyzer_desires, [])
-            
-            for intention in analyzer_intentions:
-                await self.analyzer_agent.act(intention, task_context)
-            
-            await self._show_typing(update)
-            
-            logger.info(f"🔍 Step 3: Decision Agent processing...")
-            decision_beliefs = await self.decision_agent.perceive(self.analyzer_agent.beliefs, task_context)
-            decision_desires = await self.decision_agent.update_desires(decision_beliefs, task_context)
-            decision_intentions = await self.decision_agent.deliberate(decision_beliefs, decision_desires, [])
-            
-            for intention in decision_intentions:
-                await self.decision_agent.act(intention, task_context)
-            
-            await self._show_typing(update)
-            
-            logger.info(f"🔍 Step 4: Execution Agent processing...")
-            execution_beliefs = await self.execution_agent.perceive(self.decision_agent.beliefs, task_context)
-            execution_desires = await self.execution_agent.update_desires(execution_beliefs, task_context)
-            execution_intentions = await self.execution_agent.deliberate(execution_beliefs, execution_desires, [])
-            
-            results = []
-            for intention in execution_intentions:
-                result = await self.execution_agent.act(intention, task_context)
-                results.append(result)
-            
-            # send results back to user
-            if results and any(result.get('action_taken') for result in results):
-                response = f"**Task Completed Successfully!**\n\n"
-                
-                for i, result in enumerate(results, 1):
-                    if result.get('action_taken'):
-                        response += f"**{i}.** {result.get('description', 'Task executed')}\n"
-                        if result.get('time_saved'):
-                            response += f"⏰ Time saved: {result.get('time_saved')} minutes\n"
-                        if result.get('details'):
-                            response += f"📝 Details: {result.get('details')}\n"
-                        response += "\n"
-                
-                response += f"**Total tasks completed**: {len([r for r in results if r.get('action_taken')])}\n"
-                response += f"🚀 **Business impact**: Automated execution with measurable results!"
-                
-                await update.message.reply_text(response, parse_mode='Markdown')
-                
-                # store successful execution in conversation memory
-                self.conversation_memory.add_message(
-                    str(user.id), 
-                    f"Successfully executed: {request_text}", 
-                    is_user=False
-                )
-            else:
-                # No actions were taken - provide analysis instead
-                response = f"📊 **Task Analysis Complete**\n\n"
-                response += f"I've analyzed your request: *{request_text}*\n\n"
-                response += f"**Status**: Analyzed and learned from this request\n"
-                response += f"**Next Steps**: The automation opportunity has been noted for future implementation\n\n"
-                response += f"**Business Value**: Improved understanding of your workflow patterns"
-                
-                await update.message.reply_text(response, parse_mode='Markdown')
-                
-        except Exception as e:
-            logger.error(f"Error in task execution: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            
-            error_response = f"⚠️ **Task Processing Error**\n\n"
-            error_response += f"I encountered an issue while processing your request: *{request_text}*\n\n"
-            error_response += f"**Error**: {str(e)}\n\n"
-            error_response += f"Please try again or contact support if the issue persists."
-            
-            await update.message.reply_text(error_response, parse_mode='Markdown')
+
 
     async def _handle_silent_learning(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle silent learning from conversations"""
@@ -609,7 +596,7 @@ class HybridNativeAI:
         observer_summary = self.observer_agent.get_intelligence_summary()
         
         status_message = f"""
-🤖 **Native AI Learning Status**
+🤖 **Native IQ Learning Status**
 
 **Learning Modes:**
 • 🤫 Silent messages learned: {self.silent_messages_learned}
@@ -622,7 +609,7 @@ class HybridNativeAI:
 • 🎯 Decisions made: {len(self.decision_agent.decisions)}
 • ⚡ Executions completed: {len(self.execution_agent.executions)}
 
-**Current Mode**: {'🤫 Silent Learning' if update.effective_user.id not in self.interactive_users else '💬 Interactive Chat'}
+**Current Mode**: {'Silent Learning' if update.effective_user.id not in self.interactive_users else 'Interactive Chat'}
 
 **Business Intelligence**: Ready to automate and optimize your workflows! 🚀
         """
@@ -641,8 +628,8 @@ class HybridNativeAI:
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
 
     async def run(self):
-        """Start the Native AI bot"""
-        logger.info("Starting Native AI Hybrid Bot...")
+        """Start the Native IQ bot"""
+        logger.info("Starting Native IQ Hybrid Bot...")
         
         # Setup handlers first
         self.setup_handlers()

@@ -1,6 +1,6 @@
 
 """
-Standalone script to run the Native AI Telegram bot
+Standalone script to run the Native IQ Telegram bot
 This script uses a non-asyncio approach to avoid event loop conflicts
 """
 
@@ -78,7 +78,7 @@ def main():
                   execution_agent, proactive_agent, proactive_conversation_engine, auth_handler)
     
     # Start the bot using non-asyncio method
-    logger.info("Starting Native AI Bot...")
+    logger.info("Starting Native IQ Bot...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":

@@ -120,18 +120,162 @@
         "content": "Hi",
         "is_user": true,
         "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T16:53:32.381005",
+        "content": "can you check my calendar and let me know what's the schedule I have for tomorrow?",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:06:49.026592",
+        "content": "can you check my calendar and let me know what's the schedule I have for tomorrow?",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:08:49.397881",
+        "content": "can you check my calendar and let me know what's the schedule I have for tomorrow?",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:12:50.929238",
+        "content": "can you check my calendar and let me know what's the schedule I have for tomorrow?",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:15:07.447546",
+        "content": "ishrmasarthak@gmail.com  mail him that we have a meeting tomorrow at 3:30 afternoon. and schedule it too.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:15:50.797530",
+        "content": "do it",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:27:17.356444",
+        "content": "can you check my schedule for tomorrow?",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:33:45.445440",
+        "content": "can you check my schedule for tomorrow?",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:39:05.290628",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:41:15.523081",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:44:14.478498",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:44:15.441348",
+        "content": "\u274c Sorry, I encountered an error while processing your request: No module named 'src.core.models'",
+        "is_user": false,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:45:37.000100",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:45:37.962504",
+        "content": "\u274c Sorry, I encountered an error while processing your request: Intention.__init__() got an unexpected keyword argument 'priority'",
+        "is_user": false,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:48:18.565520",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:48:19.237539",
+        "content": "\u274c I couldn't complete that task: 'ExecutionAgent' object has no attribute '_llm_analyze_and_executes'",
+        "is_user": false,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:49:54.537190",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T17:49:58.395632",
+        "content": "\u2705 Task completed successfully!\n\n",
+        "is_user": false,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T18:02:34.728632",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T18:02:38.297780",
+        "content": "\u274c I couldn't complete that task: Unknown error occurred",
+        "is_user": false,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T18:05:32.398357",
+        "content": "schedule a meeting at 3:30 afternoon tomorrow.",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T18:05:36.512175",
+        "content": "Permission requested - please confirm to proceed.",
+        "is_user": false,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T18:05:40.679416",
+        "content": "yes",
+        "is_user": true,
+        "reply_to": null
+      },
+      {
+        "timestamp": "2025-08-08T18:05:45.877791",
+        "content": "Great, Sarthak. I've confirmed the meeting for 3:30 PM tomorrow. If there's anything specific you would like to prepare for the meeting, just let me know. I'm here to help streamline any tasks or gather insights that might be useful. Additionally, if you need assistance with automating some of your regular tasks to free up more time, feel free to discuss that with me. Let's keep things efficient and productive.",
+        "is_user": false,
+        "reply_to": null
       }
     ],
     "123456": [
       {
         "timestamp": "2025-08-05T12:59:33.549025",
-        "content": "Hello Native AI, can you help me with business operations?",
+        "content": "Hello Native IQ, can you help me with business operations?",
         "is_user": true,
         "reply_to": null
       },
       {
         "timestamp": "2025-08-05T13:00:15.548912",
-        "content": "Hello Native AI, can you help me with business operations?",
+        "content": "Hello Native IQ, can you help me with business operations?",
         "is_user": true,
         "reply_to": null
       },
@@ -143,7 +287,7 @@
       },
       {
         "timestamp": "2025-08-05T13:06:17.177693",
-        "content": "Hello Native AI, can you help me with business operations?",
+        "content": "Hello Native IQ, can you help me with business operations?",
         "is_user": true,
         "reply_to": null
       },
@@ -155,7 +299,7 @@
       },
       {
         "timestamp": "2025-08-05T13:08:55.838531",
-        "content": "Hello Native AI, can you help me with business operations?",
+        "content": "Hello Native IQ, can you help me with business operations?",
         "is_user": true,
         "reply_to": null
       },
@@ -264,7 +408,7 @@
       "first_name": "Sarthak",
       "last_name": null,
       "username": null,
-      "last_seen": "2025-08-08T12:01:06.464648"
+      "last_seen": "2025-08-08T18:05:40.681431"
     },
     "123456": {
       "first_name": "Test User",

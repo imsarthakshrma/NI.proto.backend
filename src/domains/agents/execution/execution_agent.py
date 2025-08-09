@@ -1,5 +1,5 @@
 """
-Execution Agent for Native AI
+Execution Agent for Native IQ
 Executes approved automation decisions from Decision Agent
 """
 
@@ -13,6 +13,8 @@ from enum import Enum
 from langchain_core.tools import BaseTool
 from langchain_core.messages import HumanMessage
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
+from src.domains.tools.google_drive_tool import get_google_drive_tools
+from src.domains.tools.email_tool import send_email
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,9 @@ class ExecutionAgent(BaseAgent):
             )
         ]
 
+        # Register Google Drive and email tools
+        self._register_default_tools()
+        
         logger.info(f"Execution Agent initialized: {self.agent_id}")
 
     def register_tool(self, tool_name: str, tool: BaseTool):
@@ -102,6 +107,31 @@ class ExecutionAgent(BaseAgent):
         """Check if a specific tool is available"""
         return tool_name in self.available_tools
 
+    def _register_default_tools(self):
+        """Register default tools including Google Drive, email, and calendar"""
+        try:
+            # Register Google Drive tools
+            drive_tools = get_google_drive_tools()
+            for tool in drive_tools:
+                self.register_tool(tool.name, tool)
+            
+            # Register email tool
+            self.register_tool("email_tool", send_email)
+            
+            # Register calendar tools
+            try:
+                from src.domains.tools.calandar_tool import get_calendar_tools
+                calendar_tools = get_calendar_tools()
+                for tool in calendar_tools:
+                    self.register_tool(tool.name, tool)
+                logger.info(f"Calendar tools registered: {len(calendar_tools)} tools")
+            except Exception as calendar_error:
+                logger.warning(f"Calendar tools not available: {calendar_error}")
+            
+            logger.info(f"Default tools registered: Google Drive ({len(drive_tools)}) + email + calendar")
+        except Exception as e:
+            logger.error(f"Error registering default tools: {e}")
+    
     def set_calendar_tools(self, tools: Dict[str, Any]):
         """Set calendar tools for execution"""
         self.calendar_tools = tools
@@ -141,35 +171,53 @@ class ExecutionAgent(BaseAgent):
             return beliefs
 
     async def act(self, intention: Intention, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute automation actions using tools"""
+        """Execute automation actions using LLM-powered intent detection and tool calling"""
         try:
             logger.info(f"🚀 Execution Agent acting on intention: {intention.action_type}")
+            logger.info(f"🔍 Context keys: {list(context.keys())}")
             
             # Extract task information from context
             user_message = context.get("user_message", "")
+            logger.info(f"🔍 User message extracted: '{user_message}'")
             
-            # Determine task type from intention and user message
-            task_type = self._determine_task_type(intention.action_type, user_message)
-            
-            if task_type:
-                # Prepare parameters for tool execution
-                parameters = self._prepare_task_parameters(task_type, user_message, context)
-                
-                # Execute using tools
-                logger.info(f"🎯 Executing task: {task_type} with tools")
-                result = await self._execute_task_with_tools(task_type, parameters)
-                
-                if result.get('success'):
-                    logger.info(f"✅ Tool-based execution successful: {result.get('description')}")
-                    return result
-                else:
-                    logger.warning(f"⚠️ Tool-based execution failed: {result.get('error')}")
-                    # Fallback to legacy methods if tools fail
-                    return await self._fallback_execution(intention, context)
-            else:
-                # No specific task identified, use general automation
-                logger.info("📋 No specific task identified, using general automation")
+            if not user_message:
+                logger.warning("No user message found in context, cannot use LLM analysis")
                 return await self._fallback_execution(intention, context)
+            
+            # Use LLM to analyze intent and determine tool calls
+            logger.info(f"🤖 Starting LLM analysis for: {user_message}")
+            llm_result = await self._llm_analyze_and_execute(user_message, context)
+            
+            if llm_result.get('success'):
+                logger.info(f"LLM-powered execution successful")
+                return llm_result
+            elif llm_result.get('requires_permission'):
+                logger.info(f"LLM-powered execution requires permission; returning prompt to user")
+                return llm_result
+            else:
+                logger.warning(f"LLM-powered execution failed, falling back to rule-based")
+                # Fallback to rule-based approach
+                task_type = self._determine_task_type(intention.action_type, user_message)
+                
+                if task_type:
+                    # Prepare parameters for tool execution
+                    parameters = self._prepare_task_parameters(task_type, user_message, context)
+                    
+                    # Execute using tools
+                    logger.info(f"🎯 Executing task: {task_type} with tools")
+                    result = await self._execute_task_with_tools(task_type, parameters, context)
+                    
+                    if result.get('success'):
+                        logger.info(f"Tool-based execution successful: {result.get('description')}")
+                        return result
+                    else:
+                        logger.warning(f"Tool-based execution failed: {result.get('error')}")
+                        # Fallback to legacy methods if tools fail
+                        return await self._fallback_execution(intention, context)
+                else:
+                    # No specific task identified, use general automation
+                    logger.info("📋 No specific task identified, using general automation")
+                    return await self._fallback_execution(intention, context)
                 
         except Exception as e:
             logger.error(f"Error in Execution Agent action: {e}")
@@ -178,6 +226,199 @@ class ExecutionAgent(BaseAgent):
                 "action_taken": False,
                 "error": str(e)
             }
+
+    async def _llm_analyze_and_execute(self, user_message: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Use LLM to analyze user intent and execute appropriate tools"""
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            import json
+            
+            # Initialize LLM
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+            
+            # Get available tools for LLM context
+            available_tools = list(self.available_tools.keys())
+            
+            # Create system prompt for intent analysis and tool calling
+            system_prompt = f"""You are an intelligent task execution agent. Analyze the user's request and determine:
+1. What the user wants to accomplish
+2. Which tool(s) to use from the available tools
+3. What parameters to pass to the tool(s)
+
+Available tools:
+{', '.join(available_tools)}
+
+Tool descriptions:
+- get_upcoming_meetings: Check calendar for upcoming meetings (parameter: days_ahead)
+- schedule_meeting: Schedule a new meeting (parameters: title, start_time, duration_minutes, attendees)
+- list_drive_files: List Google Drive files
+- send_email: Send an email (parameters: recipient, subject, body)
+- find_free_slots: Find available calendar slots (parameters: duration_minutes, days_ahead)
+
+Respond with JSON in this exact format:
+{{
+    "intent": "brief description of what user wants",
+    "tool_to_use": "exact_tool_name",
+    "parameters": {{"param1": "value1", "param2": "value2"}},
+    "confidence": 0.9,
+    "requires_permission": false
+}}
+
+For read-only operations (checking calendar, listing files), set requires_permission to false.
+For write operations (scheduling, sending emails), set requires_permission to true."""
+
+            user_prompt = f"User request: {user_message}"
+            
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            # Get LLM response
+            response = await llm.ainvoke(messages)
+            llm_response = response.content.strip()
+            
+            logger.info(f"🤖 LLM analysis: {llm_response}")
+            
+            # Parse LLM response
+            try:
+                analysis = json.loads(llm_response)
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse LLM response as JSON: {llm_response}")
+                return {"success": False, "error": "LLM response parsing failed"}
+            
+            # Extract tool and parameters
+            tool_name = analysis.get("tool_to_use")
+            parameters = analysis.get("parameters", {})
+            intent = analysis.get("intent", "")
+            confidence = analysis.get("confidence", 0.5)
+            requires_permission = analysis.get("requires_permission", True)
+            
+            if not tool_name or tool_name not in self.available_tools:
+                logger.warning(f"LLM suggested invalid tool: {tool_name}")
+                return {"success": False, "error": f"Invalid tool suggested: {tool_name}"}
+            
+            # Check permission for write operations
+            if requires_permission:
+                permission_context = context.get("permission_context", {})
+                user_confirmed = permission_context.get("user_confirmed", False)
+                
+                if not user_confirmed:
+                    return {
+                        "success": False,
+                        "requires_permission": True,
+                        "intent": intent,
+                        "tool_name": tool_name,
+                        "parameters": parameters,
+                        "permission_message": f"🤖 Should I {intent.lower()}?",
+                        "confidence": confidence
+                    }
+            
+            # Execute the tool
+            logger.info(f"🎯 LLM determined tool: {tool_name} with parameters: {parameters}")
+            
+            tool = self.available_tools[tool_name]
+            
+            # Execute tool based on its type
+            if hasattr(tool, 'ainvoke'):
+                result = await tool.ainvoke(parameters)
+            elif hasattr(tool, 'invoke'):
+                result = tool.invoke(parameters)
+            else:
+                result = await tool(parameters)
+            
+            logger.info(f"✅ LLM-guided tool execution successful: {result}")
+            
+            # Format response with LLM
+            formatted_response = await self._llm_format_response(user_message, intent, result, tool_name)
+            
+            return {
+                "success": True,
+                "action_taken": True,
+                "intent": intent,
+                "tool_used": tool_name,
+                "result": result,
+                "formatted_response": formatted_response,
+                "confidence": confidence,
+                "llm_powered": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in LLM-powered execution: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _llm_format_response(self, user_message: str, intent: str, tool_result: str, tool_name: str) -> str:
+        """Use LLM to format the tool result into a natural response"""
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+            
+            system_prompt = """You are Native IQ, an intelligent AI assistant. Format the tool result into a natural, conversational response.
+
+Guidelines:
+- Be conversational and helpful
+- Include the actual data from the tool result
+- Ask follow-up questions when appropriate
+- Use emojis sparingly but effectively
+- Be proactive in suggesting next steps
+
+Keep responses concise but informative."""
+
+            user_prompt = f"""
+User asked: {user_message}
+Intent: {intent}
+Tool used: {tool_name}
+Tool result: {tool_result}
+
+Format this into a natural response:"""
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            response = await llm.ainvoke(messages)
+            return response.content.strip()
+            
+        except Exception as e:
+            logger.error(f"Error formatting LLM response: {e}")
+            # Fallback to simple formatting
+            if "No upcoming meetings" in str(tool_result):
+                return f"📅 I checked your calendar and you don't have any meetings scheduled. Would you like me to schedule something?"
+            else:
+                return f"✅ Here's what I found:\n\n{tool_result}\n\nIs there anything else you'd like me to help with?"
+    
+    def _generate_permission_message(self, task_type: str, parameters: Dict[str, Any]) -> str:
+        """Generate user-friendly permission request message"""
+        user_message = parameters.get("user_message", "")
+        
+        if task_type == "get_upcoming_meetings":
+            days = parameters.get("days_ahead", 1)
+            time_phrase = "tomorrow" if days == 1 else f"next {days} days"
+            return f"🗓️ Should I check your calendar and show your schedule for {time_phrase}?"
+        
+        elif task_type == "schedule_meeting":
+            title = parameters.get("title", "meeting")
+            return f"📅 Should I schedule '{title}' for you?"
+        
+        elif task_type == "send_email":
+            recipient = parameters.get("recipient", "recipient")
+            return f"📧 Should I send an email to {recipient}?"
+        
+        elif task_type == "list_drive_files":
+            return f"📁 Should I list your Google Drive files?"
+        
+        elif task_type == "download_drive_file":
+            return f"⬇️ Should I download the file from Google Drive?"
+        
+        elif task_type == "upload_drive_file":
+            return f"⬆️ Should I upload the file to Google Drive?"
+        
+        else:
+            return f"🤖 Should I execute: {user_message}?"
     
     def _determine_task_type(self, action_type: str, user_message: str) -> Optional[str]:
         """Determine the task type from intention and user message"""
@@ -185,8 +426,25 @@ class ExecutionAgent(BaseAgent):
         message_lower = user_message.lower()
         
         # Check for specific task patterns
-        if "email" in action_lower or "email" in message_lower or "send" in message_lower:
+        # Google Drive operations
+        if "drive" in action_lower or "drive" in message_lower or "google drive" in message_lower:
+            # Order matters: check for info/details first to avoid matching generic verbs like 'get'
+            if "info" in message_lower or "details" in message_lower:
+                return "get_drive_file_info"
+            elif "list" in message_lower or "files" in message_lower or "show" in message_lower:
+                return "list_drive_files"
+            elif "download" in message_lower:
+                return "download_drive_file"
+            elif "upload" in message_lower or "save" in message_lower:
+                return "upload_drive_file"
+        # Email operations
+        elif "email" in action_lower or "email" in message_lower or "send" in message_lower:
             return "send_email"
+        elif "calendar" in action_lower or "calendar" in message_lower or "check calendar" in message_lower:
+            if "check" in message_lower or "show" in message_lower or "what" in message_lower or "schedule" in message_lower:
+                return "get_upcoming_meetings"
+            else:
+                return "schedule_meeting"
         elif "meeting" in action_lower or "schedule" in action_lower or "meeting" in message_lower or "schedule" in message_lower:
             return "schedule_meeting"
         elif "report" in action_lower or "create" in action_lower or "report" in message_lower or "generate" in message_lower:
@@ -212,7 +470,7 @@ class ExecutionAgent(BaseAgent):
             return {
                 **base_params,
                 "recipient": "user@example.com",
-                "subject": "Automated Email from Native AI",
+                "subject": "Automated Email from Native IQ",
                 "body": f"This email was generated based on your request: {user_message}"
             }
         elif task_type == "schedule_meeting":
@@ -224,11 +482,25 @@ class ExecutionAgent(BaseAgent):
                 "attendees": ["team@company.com"],
                 "description": f"Meeting scheduled based on: {user_message}"
             }
+        elif task_type == "get_upcoming_meetings":
+            # Extract days from user message (default to 1 for "tomorrow")
+            days_ahead = 1
+            if "tomorrow" in user_message.lower():
+                days_ahead = 1
+            elif "week" in user_message.lower():
+                days_ahead = 7
+            elif "month" in user_message.lower():
+                days_ahead = 30
+            
+            return {
+                **base_params,
+                "days_ahead": days_ahead
+            }
         elif task_type == "create_report":
             return {
                 **base_params,
                 "title": "Automated Report",
-                "content": f"Report generated based on: {user_message}\n\nDate: {datetime.now().strftime('%Y-%m-%d')}\n\nThis report was automatically created by Native AI.",
+                "content": f"Report generated based on: {user_message}\n\nDate: {datetime.now().strftime('%Y-%m-%d')}\n\nThis report was automatically created by Native IQ.",
                 "format": "text"
             }
         elif task_type == "create_file":
@@ -509,7 +781,7 @@ class ExecutionAgent(BaseAgent):
                         "start_time": (datetime.now() + timedelta(days=1)).isoformat(),
                         "duration_minutes": parameters.get("duration", 30),
                         "attendees": parameters.get("attendees", ["user@example.com"]),
-                        "description": "Meeting scheduled by Native AI Execution Agent"
+                        "description": "Meeting scheduled by Native IQ Execution Agent"
                     })
                     
                     execution.execution_details = {"calendar_result": meeting_result}
@@ -586,7 +858,7 @@ class ExecutionAgent(BaseAgent):
             logger.error(f"Error executing automated response: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _execute_task_with_tools(self, task_type: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def _execute_task_with_tools(self, task_type: str, parameters: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """Execute tasks using available tools"""
         try:
             execution_id = f"tool_exec_{datetime.now().timestamp()}"
@@ -599,7 +871,12 @@ class ExecutionAgent(BaseAgent):
                 "create_file": "file_tool",
                 "send_message": "messaging_tool",
                 "create_report": "report_tool",
-                "web_search": "search_tool"
+                "web_search": "search_tool",
+                "list_drive_files": "list_drive_files",
+                "download_drive_file": "download_drive_file",
+                "upload_drive_file": "upload_drive_file",
+                "get_drive_file_info": "get_drive_file_info",
+                "get_upcoming_meetings": "get_upcoming_meetings",
             }
             
             required_tool = tool_mapping.get(task_type)
@@ -612,6 +889,7 @@ class ExecutionAgent(BaseAgent):
             # Check if required tool is available
             if not self.has_tool(required_tool):
                 logger.warning(f"Required tool '{required_tool}' not available for task '{task_type}'")
+                logger.warning(f"Available tools: {list(self.available_tools.keys())}")
                 return {
                     "success": False,
                     "error": f"Tool '{required_tool}' not available",
@@ -622,17 +900,60 @@ class ExecutionAgent(BaseAgent):
             tool = self.available_tools[required_tool]
             logger.info(f"🔧 Using tool: {required_tool}")
             
-            # Execute tool with parameters
+            # Auto-execute read-only tasks, ask permission for write operations
+            read_only_tasks = [
+                "get_upcoming_meetings", "list_drive_files", "get_drive_file_info", 
+                "web_search", "find_free_slots"
+            ]
+            
+            permission_context = context.get("permission_context", {})
+            user_confirmed = permission_context.get("user_confirmed", False)
+            
+            # Skip permission for read-only tasks
+            if task_type not in read_only_tasks and not user_confirmed:
+                # Return permission request for write operations
+                return {
+                    "success": False,
+                    "requires_permission": True,
+                    "task_type": task_type,
+                    "tool_name": required_tool,
+                    "parameters": parameters,
+                    "permission_message": self._generate_permission_message(task_type, parameters),
+                    "execution_id": execution_id
+                }
+            
+            # Execute tool with parameters (auto for read-only, or if user confirmed)
             try:
-                if hasattr(tool, 'ainvoke'):
-                    # Async tool execution
-                    result = await tool.ainvoke(parameters)
-                elif hasattr(tool, 'invoke'):
-                    # Sync tool execution
-                    result = tool.invoke(parameters)
+                logger.info(f"🔧 About to execute tool '{required_tool}' with parameters: {parameters}")
+                
+                # Special handling for calendar tools
+                if task_type == "get_upcoming_meetings":
+                    # Import and call calendar tool directly
+                    try:
+                        from src.domains.tools.calandar_tool import get_upcoming_meetings
+                        days_ahead = parameters.get("days_ahead", 1)
+                        result = await get_upcoming_meetings(days_ahead=days_ahead)
+                        logger.info(f"✅ Calendar tool executed directly: {result}")
+                    except Exception as calendar_error:
+                        logger.error(f"Direct calendar tool call failed: {calendar_error}")
+                        # Fallback to registered tool
+                        if hasattr(tool, 'ainvoke'):
+                            result = await tool.ainvoke(parameters)
+                        elif hasattr(tool, 'invoke'):
+                            result = tool.invoke(parameters)
+                        else:
+                            result = await tool(parameters)
                 else:
-                    # Direct call
-                    result = await tool(parameters)
+                    # Normal tool execution for other tools
+                    if hasattr(tool, 'ainvoke'):
+                        # Async tool execution
+                        result = await tool.ainvoke(parameters)
+                    elif hasattr(tool, 'invoke'):
+                        # Sync tool execution
+                        result = tool.invoke(parameters)
+                    else:
+                        # Direct call
+                        result = await tool(parameters)
                 
                 logger.info(f"✅ Tool execution successful: {result}")
                 
@@ -647,7 +968,11 @@ class ExecutionAgent(BaseAgent):
                     "create_file": 10.0,
                     "create_report": 20.0,
                     "send_message": 3.0,
-                    "web_search": 8.0
+                    "web_search": 8.0,
+                    "list_drive_files": 3.0,
+                    "download_drive_file": 7.0,
+                    "upload_drive_file": 10.0,
+                    "get_drive_file_info": 2.0
                 }
                 time_saved = time_saved_mapping.get(task_type, 5.0)
                 self.total_time_saved += time_saved

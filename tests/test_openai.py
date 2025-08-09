@@ -123,7 +123,7 @@ async def test_hybrid_native_bot():
                 self.bot = None
         
         # Create mock objects
-        message = MockMessage("Hello Native AI, can you help me with business operations?")
+        message = MockMessage("Hello Native IQ, can you help me with business operations?")
         user = MockUser(123456, "Test User")
         update = MockUpdate(message, user)
         context = MockContext()

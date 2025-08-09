@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Standalone script to run the Native AI Telegram bot
+Standalone script to run the Native IQ Telegram bot
 This script avoids event loop conflicts by using a simple approach
 """
 
@@ -33,7 +33,7 @@ async def main():
     bot.setup_handlers()
     
     # Start the bot
-    logger.info("Starting Native AI Bot...")
+    logger.info("Starting Native IQ Bot...")
     await bot.application.run_polling(stop_signals=None)
 
 if __name__ == "__main__":

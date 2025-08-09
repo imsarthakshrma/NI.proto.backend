@@ -1,5 +1,5 @@
 """
-Telegram bot Integration for Dela AI
+Telegram bot Integration for Native IQ
 """
 
 import os
@@ -46,7 +46,7 @@ class NativeAIBot:
         self.processed_messages = 0
         self.learned_patterns = 0
         
-        logger.info(f"Native AI Bot initialized with Observer Agent: {self.observer_agent.agent_id}")
+        logger.info(f"Native IQ Bot initialized with Observer Agent: {self.observer_agent.agent_id}")
 
     def get_greeting(self):
         current_hour = datetime.now().hour
@@ -67,9 +67,9 @@ class NativeAIBot:
 
         logger.info(f"Start command from user {user.id} in chat {chat.id}")
 
-        welcome_message = """
-        {self.get_greeting()} {user.first_name}, how can I assist you?
-        """
+        welcome_message = (
+            f"{self.get_greeting()} {user.first_name}, how can I assist you?"
+        )
 
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
 
@@ -86,7 +86,7 @@ class NativeAIBot:
             intelligence_summary = self.observer_agent.get_intelligence_summary()
             
             status_message = f"""
-            **Native AI Observer Status**
+            **Native IQ Observer Status**
 
             **Agent Info:**
             - Agent ID: `{status['agent_id']}`
@@ -171,15 +171,15 @@ class NativeAIBot:
                 return
             
             help_message = """
-            **Native AI Help**
+            **Native IQ Help**
 
-            **How Native AI learns:**
+            **How Native IQ learns:**
             1. **Observes** your messages and communication style
             2. **Analyzes** decision patterns and business relationships
             3. **Identifies** repetitive tasks for automation
             4. **Builds** intelligence about your work patterns
 
-            **What Native AI detects:**
+            **What Native IQ detects:**
             - Communication tone (formal/casual)
             - Decision patterns (approve/reject)
             - Automation opportunities
@@ -197,7 +197,7 @@ class NativeAIBot:
             /patterns - See learned patterns
             /help - This help message
 
-            **Need support?** Contact your Native AI administrator.
+            **Need support?** Contact your Native IQ administrator.
             """
             
             await message.reply_text(help_message, parse_mode='Markdown')
@@ -255,7 +255,7 @@ class NativeAIBot:
             summary = self.observer_agent.get_intelligence_summary()
             
             update_message = f"""
-            **Native AI Learning Update**
+            **Native IQ Learning Update**
 
             Processed {self.processed_messages} messages
             Learned {summary.get('patterns_learned', 0)} patterns
@@ -296,7 +296,7 @@ class NativeAIBot:
         try:
             self.setup_handlers()
             
-            logger.info("Starting Native AI...")
+            logger.info("Starting Native IQ...")
             await self.application.initialize()
             await self.application.start()
             
@@ -304,7 +304,7 @@ class NativeAIBot:
             await self.application.updater.start_polling()
             self.is_running = True
             
-            logger.info("🤖 Native AI is running and ready to learn!")
+            logger.info("🤖 Native IQ is running and ready to learn!")
             
             # Keep the bot running
             while self.is_running:
@@ -316,7 +316,7 @@ class NativeAIBot:
     
     async def stop_bot(self):
         try:
-            logger.info("Stopping Native AI...")
+            logger.info("Stopping Native IQ...")
             self.is_running = False
             
             if self.application:
@@ -324,7 +324,7 @@ class NativeAIBot:
                 await self.application.stop()
                 await self.application.shutdown()
             
-            logger.info("🤖 Native AI stopped successfully")
+            logger.info("🤖 Native IQ stopped successfully")
             
         except Exception as e:
             logger.error(f"Error stopping bot: {e}")

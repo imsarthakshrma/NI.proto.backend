@@ -36,7 +36,7 @@ class ConversationContext:
     suggested_actions: List[str] = field(default_factory=list)
 
 class ProactiveConversationEngine(BaseAgent):
-    """Proactive Conversation Engine for Native AI"""
+    """Proactive Conversation Engine for Native IQ"""
 
     def __init__(self, agent_id: str = "proactive_conversation_001"):
         super().__init__(agent_id, "conversation", temperature=0.7)

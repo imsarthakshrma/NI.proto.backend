@@ -40,21 +40,21 @@ class ProactiveCommunicationAgent(BaseAgent):
         
         # Professional PA/Co-founder personality prompts
         self.personality_prompts = {
-            "base": """You are Native AI, a professional executive assistant and business co-founder. 
+            "base": """You are Native IQ, a professional executive assistant and business co-founder. 
             You communicate like a trusted colleague who deeply understands business operations. You're professional 
             but approachable, efficient yet personable. You focus on getting things done and helping your user succeed. 
             You speak like a seasoned business professional - direct, helpful, and always thinking ahead.""",
             
-            "conversational_chat": """You are Native AI, acting as a professional executive assistant and business partner. 
+            "conversational_chat": """You are Native IQ, acting as a professional executive assistant and business partner. 
             You communicate naturally like a trusted colleague who knows the business inside and out. You're helpful, 
             efficient, and always thinking about how to improve operations. You can discuss business strategy, handle 
             operational tasks, or have professional conversations. You're like talking to your most competent business partner.""",
             
-            "capability_explanation": """You are Native AI explaining your business capabilities as a professional assistant. 
+            "capability_explanation": """You are Native IQ explaining your business capabilities as a professional assistant. 
             Be specific about your operational skills and business tools. Sound like an experienced executive assistant 
             explaining how they can support the business - confident, knowledgeable, and focused on results.""",
             
-            "automation_assistance": """You are Native AI helping with business automation and operations. You understand 
+            "automation_assistance": """You are Native IQ helping with business automation and operations. You understand 
             workflows, processes, and efficiency improvements. You communicate like a business operations expert who can 
             identify bottlenecks and implement solutions. Be practical and results-focused.""",
             
@@ -486,9 +486,9 @@ class ProactiveCommunicationAgent(BaseAgent):
             user_message_lower = user_message.lower()
             
             if "how can you help" in user_message_lower or "what can you do" in user_message_lower:
-                return f"Hi {user_name}! I'm Native AI, your executive assistant and business operations partner. I handle automation, scheduling, communications, business analysis, and continuous learning to improve your operations. What business challenge can I help you tackle today?"
+                return f"Hi {user_name}! I'm Native IQ, your executive assistant and business operations partner. I handle automation, scheduling, communications, business analysis, and continuous learning to improve your operations. What business challenge can I help you tackle today?"
             elif "who are you" in user_message_lower or "what are you" in user_message_lower:
-                return f"I'm Native AI, your intelligent business co-founder and executive assistant. I specialize in automating workflows, managing communications, analyzing business patterns, and helping you stay organized. Think of me as your most capable business partner."
+                return f"I'm Native IQ, your intelligent business co-founder and executive assistant. I specialize in automating workflows, managing communications, analyzing business patterns, and helping you stay organized. Think of me as your most capable business partner."
             elif "hello" in user_message_lower or "hi" in user_message_lower:
                 return f"Hello {user_name}! Ready to tackle some business objectives today. How can I support your operations?"
             elif "help me with" in user_message_lower or "i need" in user_message_lower:
@@ -522,7 +522,7 @@ class ProactiveCommunicationAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Error sending Telegram message: {e}")
             # For production, you might want to queue messages for retry
-            print(f"NATIVE AI → {user_id}: {message}")  # Console fallback
+            print(f"Native IQ → {user_id}: {message}")  # Console fallback
 
 # Scheduler for proactive communications
 class ProactiveScheduler:

@@ -1,5 +1,5 @@
 """
-Telegram Authorization Handler for DELA AI
+Telegram Authorization Handler for Native IQ
 Manages user permissions and group access control
 """
 
