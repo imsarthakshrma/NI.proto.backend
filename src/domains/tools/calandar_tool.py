@@ -102,7 +102,7 @@ class GoogleCalendarService:
     def _load_credentials(self) -> Optional[Credentials]:
         """Load Google Calendar credentials"""
         try:
-            token_path = os.getenv('GOOGLE_CALENDAR_TOKEN_PATH', 'token.json')
+            token_path = os.getenv('GOOGLE_CALENDAR_TOKEN_PATH', 'calendar_token.json')
             credentials_path = os.getenv('GOOGLE_CALENDAR_CREDENTIALS_PATH', 'credentials.json')
             
             creds = None

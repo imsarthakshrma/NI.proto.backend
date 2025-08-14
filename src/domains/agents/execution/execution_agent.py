@@ -227,9 +227,119 @@ class ExecutionAgent(BaseAgent):
                 "error": str(e)
             }
 
+    def _looks_like_status_query(self, user_message: str) -> bool:
+        """Detect if user message is asking for status rather than requesting action"""
+        status_indicators = [
+            "did you send", "was sent", "did i send", "have you sent", "status of",
+            "check if", "was the email", "did the email", "email sent", "mail sent",
+            "did you email", "have i emailed", "was emailed", "check email",
+            "email status", "mail status", "sent status"
+        ]
+        message_lower = user_message.lower()
+        return any(indicator in message_lower for indicator in status_indicators)
+
+    async def _handle_status_query(self, user_message: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle status queries without invoking tools"""
+        try:
+            # Get session context from the hybrid bot
+            session_context = context.get("session_context", {})
+            
+            # Check for email status
+            if "email" in user_message.lower() or "mail" in user_message.lower():
+                last_email = session_context.get("last_email_status")
+                if last_email and last_email.get("sent"):
+                    recipient = last_email.get("to", ["someone"])[0] if last_email.get("to") else "someone"
+                    subject = last_email.get("subject", "email")
+                    timestamp = last_email.get("timestamp", "recently")
+                    return {
+                        "success": True,
+                        "action_taken": False,
+                        "message": f"✅ Yes, I sent the email '{subject}' to {recipient} {timestamp}.",
+                        "status_query": True
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "action_taken": False,
+                        "message": "❌ No recent email has been sent.",
+                        "status_query": True
+                    }
+            
+            # Check for meeting status
+            elif "meeting" in user_message.lower() or "schedule" in user_message.lower():
+                last_meeting = session_context.get("last_meeting")
+                if last_meeting:
+                    title = last_meeting.get("title", "Meeting")
+                    time = last_meeting.get("time", "recently")
+                    return {
+                        "success": True,
+                        "action_taken": False,
+                        "message": f"✅ Yes, I scheduled '{title}' for {time}.",
+                        "status_query": True
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "action_taken": False,
+                        "message": "❌ No recent meeting has been scheduled.",
+                        "status_query": True
+                    }
+            
+            # Generic status response
+            return {
+                "success": True,
+                "action_taken": False,
+                "message": "I can check the status of recent emails or meetings. What specifically would you like to know?",
+                "status_query": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Error handling status query: {e}")
+            return {
+                "success": False,
+                "error": f"Error checking status: {str(e)}",
+                "status_query": True
+            }
+
+    def _validate_tool_parameters(self, tool_name: str, parameters: Dict[str, Any]) -> Optional[str]:
+        """Validate that required parameters are present for the given tool"""
+        required_params = {
+            "schedule_meeting": ["title", "start_time", "duration_minutes", "attendees"],
+            "email_tool": ["recipient", "subject", "body"],
+            "get_upcoming_meetings": ["days_ahead"],
+            "find_free_slots": ["duration_minutes", "days_ahead"]
+        }
+        
+        if tool_name not in required_params:
+            return None  # No validation rules for this tool
+        
+        missing_params = []
+        for param in required_params[tool_name]:
+            if param not in parameters or parameters[param] is None or parameters[param] == "":
+                missing_params.append(param)
+        
+        if missing_params:
+            if tool_name == "email_tool":
+                return f"Please specify: {', '.join(missing_params)}. For example: recipient email, subject line, and message content."
+            elif tool_name == "schedule_meeting":
+                return f"Please specify: {', '.join(missing_params)}. For example: meeting title, date/time, duration, and attendee emails."
+            else:
+                return f"Please specify: {', '.join(missing_params)}."
+        
+        # Additional validation for specific parameters
+        if tool_name == "email_tool" and parameters.get("recipient"):
+            recipient = parameters["recipient"]
+            if "@" not in str(recipient):
+                return "Please provide a valid email address for the recipient."
+        
+        return None  # All validations passed
+
     async def _llm_analyze_and_execute(self, user_message: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Use LLM to analyze user intent and execute appropriate tools"""
         try:
+            # Check for status queries first - don't use tools for these
+            if self._looks_like_status_query(user_message):
+                return await self._handle_status_query(user_message, context)
             from langchain_openai import ChatOpenAI
             from langchain_core.messages import SystemMessage, HumanMessage
             import json
@@ -240,23 +350,53 @@ class ExecutionAgent(BaseAgent):
             # Get available tools for LLM context
             available_tools = list(self.available_tools.keys())
             
+            # Get current time with timezone for temporal grounding
+            from datetime import datetime
+            import pytz
+            user_tz = pytz.timezone(context.get("user_timezone", "Asia/Kolkata"))
+            now = datetime.now(user_tz)
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S %Z%z")
+            
             # Create system prompt for intent analysis and tool calling
             system_prompt = f"""You are an intelligent task execution agent. Analyze the user's request and determine:
 1. What the user wants to accomplish
 2. Which tool(s) to use from the available tools
 3. What parameters to pass to the tool(s)
 
+CURRENT DATETIME (user-local): {now_str}
+
+TEMPORAL RULES:
+- Resolve relative dates like 'tomorrow', 'next week' relative to the current user-local time above
+- Use the user's timezone ({user_tz}) for all times
+- Output start_time as ISO-8601 with timezone, e.g., 2025-08-12T12:00:00+05:30
+- Date/time MUST be in the FUTURE. If parsed time would be in the past, move to nearest future interpretation
+- Normalize ambiguous times: "12 Afternoon" = 12:00 PM, "evening" = 6:00 PM
+- If any required parameter is missing, set sensible default and mark requires_permission=true
+
 Available tools:
 {', '.join(available_tools)}
 
-Tool descriptions:
-- get_upcoming_meetings: Check calendar for upcoming meetings (parameter: days_ahead)
-- schedule_meeting: Schedule a new meeting (parameters: title, start_time, duration_minutes, attendees)
-- list_drive_files: List Google Drive files
-- send_email: Send an email (parameters: recipient, subject, body)
-- find_free_slots: Find available calendar slots (parameters: duration_minutes, days_ahead)
+AVAILABLE TOOLS (choose ONLY from these):
+- get_upcoming_meetings: Check calendar for upcoming meetings 
+  REQUIRED: days_ahead (integer, default: 7)
+- schedule_meeting: Schedule a new meeting
+  REQUIRED: title (string), start_time (ISO-8601 with timezone), duration_minutes (integer), attendees (array of strings)
+- list_drive_files: List Google Drive files (no parameters required)
+- email_tool: Send an email
+  REQUIRED: recipient (string), subject (string), body (string)
+- find_free_slots: Find available calendar slots
+  REQUIRED: duration_minutes (integer), days_ahead (integer)
 
-Respond with JSON in this exact format:
+CRITICAL RULES:
+- If ANY required parameter is missing or unclear, set tool_to_use to null and provide needs_clarification message
+- For schedule_meeting: attendees MUST be JSON array ["email1@domain.com"] - NEVER empty string ""
+- For email_tool: recipient MUST be a valid email address string - NO placeholders like "example.com"
+- If user asks for status ("did you send", "was sent"), do NOT choose any tool - this should not reach here
+- NEVER use placeholder emails like "user@example.com" or "recipient@example.com"
+- If email recipient is unclear, set tool_to_use to null and ask for clarification
+- If meeting attendees are unclear, set tool_to_use to null and ask for clarification
+
+Respond with ONLY valid JSON in this exact format:
 {{
     "intent": "brief description of what user wants",
     "tool_to_use": "exact_tool_name",
@@ -295,9 +435,27 @@ For write operations (scheduling, sending emails), set requires_permission to tr
             confidence = analysis.get("confidence", 0.5)
             requires_permission = analysis.get("requires_permission", True)
             
+            # Validate and normalize time parameters for scheduling tools
+            if tool_name == "schedule_meeting" and "start_time" in parameters:
+                parameters, time_issues = self._normalize_meeting_time(parameters, user_tz, now)
+                if time_issues:
+                    logger.info(f"Time normalization notes: {time_issues}")
+                    # Include resolved time in permission message
+                    analysis["time_issues"] = time_issues
+            
             if not tool_name or tool_name not in self.available_tools:
                 logger.warning(f"LLM suggested invalid tool: {tool_name}")
                 return {"success": False, "error": f"Invalid tool suggested: {tool_name}"}
+            
+            # Validate required parameters before execution
+            validation_error = self._validate_tool_parameters(tool_name, parameters)
+            if validation_error:
+                logger.warning(f"Missing required parameters for {tool_name}: {validation_error}")
+                return {
+                    "success": False,
+                    "requires_clarification": True,
+                    "message": f"I need more information to {intent.lower()}. {validation_error}"
+                }
             
             # Check permission for write operations
             if requires_permission:
@@ -305,13 +463,35 @@ For write operations (scheduling, sending emails), set requires_permission to tr
                 user_confirmed = permission_context.get("user_confirmed", False)
                 
                 if not user_confirmed:
+                    # Create detailed permission message with resolved time for scheduling
+                    permission_msg = f"🤖 Should I {intent.lower()}?"
+                    if tool_name == "schedule_meeting" and "start_time" in parameters:
+                        try:
+                            formatted_time = self._format_user_datetime(
+                                parameters["start_time"], 
+                                context.get("user_timezone", "Asia/Kolkata")
+                            )
+                            
+                            # Check if attendees are specified
+                            attendees = parameters.get("attendees", [])
+                            if isinstance(attendees, str):
+                                attendees = [a.strip() for a in attendees.split(",") if a.strip()] if attendees else []
+                            
+                            if not attendees:
+                                permission_msg = f"🤖 Should I schedule a meeting on {formatted_time}? (No attendees specified - will be a personal meeting)"
+                            else:
+                                attendee_count = len(attendees)
+                                permission_msg = f"🤖 Should I schedule a meeting on {formatted_time} with {attendee_count} attendee{'s' if attendee_count > 1 else ''}?"
+                        except Exception:
+                            pass
+                    
                     return {
                         "success": False,
                         "requires_permission": True,
                         "intent": intent,
                         "tool_name": tool_name,
                         "parameters": parameters,
-                        "permission_message": f"🤖 Should I {intent.lower()}?",
+                        "permission_message": permission_msg,
                         "confidence": confidence
                     }
             
@@ -1023,6 +1203,99 @@ Format this into a natural response:"""
 
         except Exception as e:
             logger.error(f"Error updating execution knowledge: {e}")
+
+    def _normalize_meeting_time(self, parameters: dict, user_tz, now) -> tuple[dict, list[str]]:
+        """Validate and normalize meeting time parameters"""
+        from datetime import datetime, timedelta
+        from dateutil import parser as dateparser
+        
+        issues = []
+        start_raw = parameters.get("start_time")
+        
+        if not start_raw:
+            issues.append("start_time missing")
+            return parameters, issues
+
+        try:
+            # Parse the datetime string
+            dt = dateparser.isoparse(start_raw)
+        except Exception as e:
+            issues.append(f"Invalid start_time format: {start_raw}")
+            return parameters, issues
+
+        # Attach timezone if naive
+        if dt.tzinfo is None:
+            dt = user_tz.localize(dt)
+
+        # If in the past, try to fix it
+        if dt < now:
+            # If same month/day but wrong year, fix the year
+            if dt.month == now.month and dt.day == now.day:
+                dt_future = dt.replace(year=now.year)
+                if dt_future < now:
+                    # If still in the past (same day), move to next day
+                    dt_future = dt_future + timedelta(days=1)
+                issues.append(f"Corrected year from {dt.year} to {dt_future.year}")
+                dt = dt_future
+            else:
+                # Different date but in past - likely wrong year
+                try:
+                    dt_future = dt.replace(year=now.year)
+                    if dt_future < now:
+                        # If still past, try next year
+                        dt_future = dt.replace(year=now.year + 1)
+                    issues.append(f"Adjusted date from {dt.isoformat()} to {dt_future.isoformat()}")
+                    dt = dt_future
+                except Exception:
+                    issues.append("start_time appears in the past; needs confirmation")
+
+        # Update parameters with normalized time
+        parameters["start_time"] = dt.isoformat()
+        return parameters, issues
+
+    def _format_user_datetime(self, iso_str: str, user_tz_str: str) -> str:
+        """Format datetime for user-friendly display with proper timezone handling"""
+        try:
+            from dateutil import parser as dateparser
+            import pytz
+            
+            dt = dateparser.isoparse(iso_str)
+            
+            # Convert to user timezone if needed
+            if user_tz_str:
+                try:
+                    user_tz = pytz.timezone(user_tz_str)
+                    if dt.tzinfo is None:
+                        dt = user_tz.localize(dt)
+                    else:
+                        dt = dt.astimezone(user_tz)
+                except Exception:
+                    # Fallback: keep original dt
+                    pass
+            
+            # Format components
+            day = dt.strftime("%a, %d %b %Y")
+            time = dt.strftime("%I:%M %p").lstrip("0")
+            
+            # Format timezone offset
+            offset = dt.strftime("%z")
+            if offset and len(offset) == 5:
+                offset_fmt = f"{offset[:3]}:{offset[3:]}"
+            else:
+                offset_fmt = offset or ""
+            
+            # Get timezone name/label
+            tz_label = user_tz_str or ""
+            
+            # Combine offset and label, avoid empty parentheses
+            suffix = f"{offset_fmt} {tz_label}".strip()
+            
+            return f"{day} at {time}" + (f" ({suffix})" if suffix else "")
+            
+        except Exception as e:
+            logger.error(f"Error formatting datetime: {e}")
+            # Fallback to basic formatting
+            return iso_str
 
     def _adjust_execution_strategies(self, feedback: Dict[str, Any]) -> None:
         """Adjust execution strategies based on feedback"""

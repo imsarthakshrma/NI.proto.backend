@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class NativeAIBot:
+class NativeIQBot:
     
     def __init__(self):
         self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -332,7 +332,7 @@ class NativeAIBot:
 
 # main execution
 async def main():
-    bot = NativeAIBot()
+    bot = NativeIQBot()
     
     try:
         await bot.start_bot()

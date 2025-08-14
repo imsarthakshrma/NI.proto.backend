@@ -41,12 +41,12 @@ class GoogleDriveService:
         """Authenticate with Google Drive API using OAuth2.
 
         Uses env vars:
-        - GOOGLE_DRIVE_TOKEN_PATH (default: token.json)
+        - GOOGLE_DRIVE_TOKEN_PATH (default: drive_token.json)
         - GOOGLE_DRIVE_CREDENTIALS_PATH (default: credentials.json)
         """
         try:
             creds = None
-            token_path = os.getenv("GOOGLE_DRIVE_TOKEN_PATH", "token.json")
+            token_path = os.getenv("GOOGLE_DRIVE_TOKEN_PATH", "drive_token.json")
             credentials_path = os.getenv("GOOGLE_DRIVE_CREDENTIALS_PATH", "credentials.json")
 
             if os.path.exists(token_path):

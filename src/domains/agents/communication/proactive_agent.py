@@ -32,6 +32,7 @@ class ProactiveCommunicationAgent(BaseAgent):
         super().__init__(agent_id, agent_type="communication")
         self.scheduled_messages: Dict[str, ProactiveMessage] = {}
         self.user_contexts: Dict[str, Dict[str, Any]] = {}
+        self.cooldowns: Dict[str, datetime] = {}  # User cooldown tracking
         self.openai = ChatOpenAI(
             model="gpt-4o",
             temperature=0.7,
@@ -71,6 +72,141 @@ class ProactiveCommunicationAgent(BaseAgent):
             who's always prepared and thinking ahead."""
         }
         
+    async def generate_llm_strategic_message(self, observation_data: Dict[str, Any], user_context: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate strategic proactive message using LLM with partnership tone"""
+        try:
+            system_prompt = """You are Native IQ, an intelligent AI assistant with a partnership approach.
+
+Generate a strategic proactive message based on the observation data. Focus on:
+1. Trust-first approach - observe before acting
+2. Early wins - identify quick value opportunities  
+3. Strategic thinking - consider long-term impact
+4. Partnership tone - use "we", propose solutions, seek buy-in
+
+CRITICAL: Return ONLY a valid JSON object with these fields (no markdown, no code fences, no extra text):
+- message: The actual message to send (conversational, helpful tone)
+- strategic_value: Why this message provides value
+- confidence: 0.0-1.0 confidence in the approach
+- priority: "low", "medium", "high"
+- requires_approval: true/false for whether this needs user permission
+- early_win_potential: "low", "medium", "high" 
+- action_type: "suggestion", "reminder", "question", "insight"
+
+Be natural, helpful, and focus on partnership rather than automation. Response must be valid JSON only."""
+
+            user_prompt = f"""
+Observation: {observation_data}
+User context: {user_context}
+User preferences: {self.user_contexts.get(user_context.get('user_id', ''), {})}
+
+Generate a strategic proactive message that:
+1. Explains what you observed (trust first)
+2. Suggests action using "we" language (partnership)
+3. Explains strategic value (why it matters)
+4. Asks for approval (never assumes)
+5. Shows early win potential
+
+Respond in JSON format:
+{{
+    "message": "your proactive message with partnership tone",
+    "strategic_value": "why this matters strategically",
+    "confidence": 0.8,
+    "priority": "medium|high|low",
+    "requires_approval": true,
+    "early_win_potential": "high|medium|low",
+    "action_type": "suggestion|reminder|insight"
+}}"""
+
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            response = await self.openai.ainvoke(messages)
+            
+            import json
+            import re
+            
+            # Strip markdown code fences if present
+            content = response.content.strip()
+            if content.startswith('```json'):
+                # Extract JSON from code fences
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group(1)
+                else:
+                    # Fallback: remove code fence markers
+                    content = content.replace('```json', '').replace('```', '').strip()
+            
+            try:
+                result = json.loads(content)
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse LLM response as JSON: {content}")
+                # Try to extract meaningful content anyway
+                return {
+                    "message": content.strip() if content.strip() else "I'd like to help with that. Should we discuss this further?",
+                    "strategic_value": "Maintaining communication flow",
+                    "confidence": 0.5,
+                    "priority": "medium",
+                    "requires_approval": True,
+                    "action_type": "suggestion"
+                }
+            
+            # Add metadata
+            result.update({
+                "timestamp": datetime.now().isoformat(),
+                "agent_id": self.agent_id,
+                "observation_source": observation_data.get("source", "unknown")
+            })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"LLM strategic message generation error: {e}")
+            return {
+                "message": "I noticed something that might need attention, but I'm having trouble formulating the right approach. Should we discuss this?",
+                "strategic_value": "Maintaining communication despite technical issues",
+                "confidence": 0.3,
+                "priority": "low",
+                "requires_approval": True
+            }
+
+    async def generate_contextual_response(self, message_content: str, context_type: str, user_data: Dict[str, Any]) -> str:
+        """Generate context-aware responses using LLM"""
+        try:
+            # Get user's communication style from context
+            user_style = user_data.get('communication_style', 'professional')
+            
+            system_prompt = f"""You are Native IQ. Adapt your response style based on context:
+
+    Context: {context_type}
+    User communication style: {user_style}
+
+    Guidelines by context:
+    - chat_interface: Casual, concise, partnership tone with "we" language
+    - email_draft: Professional, detailed, formal business language
+    - notification: Brief, helpful, actionable with strategic context
+    - group_observation: Strategic, insightful, collaborative tone
+    - meeting_reminder: Professional assistant tone, proactive and prepared
+
+    Always maintain Native IQ's core personality: intelligent, strategic, partnership-focused."""
+
+            user_prompt = f"""
+    Message content: {message_content}
+    Context type: {context_type}
+    User preferences: {user_data}
+
+    Generate an appropriate response that:
+    1. Matches the context and user style
+    2. Maintains Native IQ's strategic partnership approach
+    3. Uses appropriate formality level
+    4. Includes strategic thinking when relevant"""
+
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            response = await self.openai.ainvoke(messages)
+            
+            return response.content.strip()
+            
+        except Exception as e:
+            logger.error(f"Contextual response generation error: {e}")
+            return "I'd like to help with that, but I'm having some technical difficulties. Should we try a different approach?"
+    
     async def perceive(self, messages: List[str], context: Dict[str, Any]) -> List[Belief]:
         """Perceive events that trigger proactive communications"""
         beliefs = []
@@ -273,45 +409,70 @@ class ProactiveCommunicationAgent(BaseAgent):
             return []
     
     async def act(self, intention: Intention, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute proactive communication"""
+        """Execute proactive communication action using LLM-powered message generation"""
         result = {"action_taken": False, "message_sent": ""}
         
         try:
-            logger.info(f"🔍 ProactiveCommunicationAgent.act called with intention: {intention.action_type}")
+            logger.info(f" ProactiveCommunicationAgent.act called with intention: {intention.action_type}")
+            
+            # Extract parameters
             message_type = intention.parameters.get("message_type")
-            belief_content = intention.parameters.get("belief_content", {})
-            user_id = intention.parameters.get("user_id")
+            user_id = str(intention.parameters.get("user_id") or context.get("user_id") or "")
             
-            logger.info(f" Act parameters - message_type: {message_type}, user_id: {user_id}")
+            # Check cooldown to prevent spam during active execution - CRITICAL CHECK
+            if user_id and self.is_on_cooldown(user_id):
+                logger.info(f" Proactive message suppressed for user {user_id} (cooldown active)")
+                return {"action_taken": False, "message_sent": "", "suppressed": "cooldown_active"}
             
-            # Generate personalized message using LLM
-            logger.info(f" Calling _generate_proactive_message...")
-            message = await self._generate_proactive_message(message_type, belief_content, context)
-            logger.info(f" Generated message: {message}")
+            # Check for recent user activity to avoid overlap with ongoing approvals
+            if user_id and self._has_recent_user_activity(user_id, context):
+                logger.info(f" Proactive message suppressed for user {user_id} (recent user activity detected)")
+                return {"action_taken": False, "message_sent": "", "suppressed": "recent_activity"}
             
-            if message:
-                # Send message via Telegram
-                logger.info(f" Calling _send_telegram_message...")
-                await self._send_telegram_message(user_id, message)
+            if not user_id:
+                logger.warning("No user_id found for proactive message - skipping cooldown check")
+            
+            # Create observation data for LLM
+            observation_data = {
+                "type": message_type,
+                "details": intention.parameters.get("belief_content", {}),
+                "source": "proactive_system"
+            }
+            
+            user_context = {
+                "user_id": user_id,
+                "context_type": message_type
+            }
+            
+            # Generate strategic message using LLM
+            llm_result = await self.generate_llm_strategic_message(observation_data, user_context)
+            message_content = llm_result.get("message", "")
+            
+            if message_content:
+                # Send message via Telegram (only the actual message text)
+                await self._send_telegram_message(user_id, message_content)
+                
+                # Set a shorter cooldown after sending to prevent rapid repeats
+                if user_id:
+                    self.set_cooldown(user_id, 45)  # 45 seconds to prevent cascading messages
                 
                 result = {
                     "action_taken": True,
-                    "message_sent": message,
+                    "message_sent": message_content,
                     "recipient": user_id,
-                    "type": message_type
+                    "type": message_type,
+                    "strategic_value": llm_result.get("strategic_value"),
+                    "priority": llm_result.get("priority")
                 }
                 
                 logger.info(f"Native sent proactive message: {message_type} to {user_id}")
             else:
-                logger.warning(f" No message generated for type: {message_type}")
+                logger.warning(f"No message generated for type: {message_type}")
             
         except Exception as e:
             logger.error(f"Error in proactive action: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
             result["error"] = str(e)
             
-        logger.info(f" Act result: {result}")
         return result
     
     async def learn(self, beliefs: List[Belief], context: Dict[str, Any]) -> None:
@@ -454,6 +615,62 @@ class ProactiveCommunicationAgent(BaseAgent):
                 Keep it under 60 words and supportive.
                 """
             
+            elif message_type == "task_completion_summary":
+                # Extract completion details from context
+                completion_status = context.get("completion_status", {})
+                session_context = context.get("session_context", {})
+                completed_tasks = completion_status.get("completed_tasks", [])
+                
+                # Get specific task details
+                meeting_details = ""
+                email_details = ""
+                
+                if "meeting_scheduled" in completed_tasks:
+                    last_meeting = session_context.get("last_meeting", {})
+                    meeting_title = last_meeting.get("title", "Meeting")
+                    meeting_time = last_meeting.get("time", "")
+                    attendees = last_meeting.get("attendees", [])
+                    
+                    # Format meeting time for display
+                    try:
+                        from datetime import datetime
+                        if meeting_time:
+                            dt = datetime.fromisoformat(meeting_time.replace('Z', '+00:00'))
+                            formatted_time = dt.strftime("%A at %I:%M %p")
+                        else:
+                            formatted_time = "the scheduled time"
+                    except:
+                        formatted_time = "the scheduled time"
+                    
+                    attendee_name = attendees[0].split('@')[0].title() if attendees else "the attendee"
+                    meeting_details = f"scheduled a meeting '{meeting_title}' with {attendee_name} for {formatted_time}"
+                
+                if "email_sent" in completed_tasks:
+                    last_email = session_context.get("last_email_status", {})
+                    email_subject = last_email.get("subject", "")
+                    email_recipient = last_email.get("to", [""])[0] if last_email.get("to") else ""
+                    recipient_name = email_recipient.split('@')[0].title() if email_recipient else "them"
+                    email_details = f"drafted and sent an email to {recipient_name}"
+                    if email_subject:
+                        email_details += f" with the subject '{email_subject}'"
+                
+                prompt = f"""
+                {self.personality_prompts['base']}
+                
+                Context: You have just completed the following tasks for {user_name}:
+                - Meeting: {meeting_details if meeting_details else "No meeting scheduled"}
+                - Email: {email_details if email_details else "No email sent"}
+                
+                Generate a professional task completion summary message that:
+                1. Confirms what was successfully accomplished
+                2. Mentions specific details (meeting time, attendee, email sent)
+                3. Offers continued assistance
+                4. Sounds like a competent executive assistant reporting completion
+                5. Uses a warm, professional tone like the example: "Hi there! I'm pleased to let you know that I've successfully..."
+                
+                Keep it under 100 words and professional but friendly.
+                """
+            
             else:
                 # Default conversational response
                 prompt = f"""
@@ -516,13 +733,219 @@ class ProactiveCommunicationAgent(BaseAgent):
     async def _send_telegram_message(self, user_id: str, message: str):
         """Send message via Telegram"""
         try:
-            # Import your telegram bot function
-            logger.info(f"Would send Telegram message to {user_id}: {message}")
+            # For now, log the clean message that would be sent
+            logger.info(f"Sending Telegram message to {user_id}: {message}")
+            
+            # TODO: Integrate with actual Telegram bot instance
+            # This should be connected to the HybridNativeAI bot instance
+            # For now, we'll use console output as fallback
+            print(f"🤖 Native IQ → {user_id}: {message}")
             
         except Exception as e:
             logger.error(f"Error sending Telegram message: {e}")
-            # For production, you might want to queue messages for retry
-            print(f"Native IQ → {user_id}: {message}")  # Console fallback
+            # Console fallback for debugging
+            print(f"Native IQ → {user_id}: {message}")
+
+    def set_cooldown(self, user_id: str, seconds: int = 120):
+        """Set cooldown period for user to prevent message spam during active execution"""
+        from datetime import datetime, timedelta, timezone
+        # Always key by string user_id for consistency
+        user_key = str(user_id)
+        self.cooldowns[user_key] = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        # Log with clear UTC timezone indication
+        logger.info(f"Set {seconds}s cooldown for user {user_key} until {self.cooldowns[user_key].isoformat()}Z (UTC)")
+
+    def is_on_cooldown(self, user_id: str) -> bool:
+        """Check if user is on cooldown to suppress proactive messages"""
+        from datetime import datetime, timezone
+        # Always key by string user_id for consistency
+        user_key = str(user_id)
+        exp = self.cooldowns.get(user_key)
+        now = datetime.now(timezone.utc)
+        
+        if exp and now < exp:
+            remaining = int((exp - now).total_seconds())
+            logger.debug(f"User {user_key} on cooldown for {remaining}s more")
+            return True
+            
+        # Clean up expired cooldowns
+        if exp and now >= exp:
+            del self.cooldowns[user_key]
+            logger.debug(f"Cooldown expired for user {user_key}")
+            
+        return False
+
+    def _has_recent_user_activity(self, user_id: str, context: Dict[str, Any]) -> bool:
+        """Check if user has recent activity to avoid proactive message overlap"""
+        try:
+            from datetime import datetime, timedelta
+            
+            # Always use string user_id for consistency
+            user_key = str(user_id)
+            
+            # Check for recent message activity (last 3 minutes)
+            recent_threshold = datetime.now() - timedelta(minutes=3)
+            
+            # Check if there are pending actions for this user (indicates active workflow)
+            session_context = context.get("session_context", {})
+            if session_context:
+                # Look for recent timestamps in session context
+                last_meeting = session_context.get("last_meeting", {})
+                last_email = session_context.get("last_email_status", {})
+                
+                # Check if meeting or email was recent (within last 5 minutes)
+                for activity in [last_meeting, last_email]:
+                    if activity.get("timestamp"):
+                        try:
+                            activity_time = datetime.strptime(activity["timestamp"], "%Y-%m-%d %H:%M:%S")
+                            if activity_time > recent_threshold:
+                                logger.debug(f"Recent activity detected for user {user_key}: {activity_time}")
+                                return True
+                        except:
+                            continue
+            
+            # Additional check: if user is in middle of approval workflow
+            # This would require access to pending_actions from HybridNativeAI
+            # For now, we rely on cooldown system which is already effective
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking recent user activity: {e}")
+            return False  # Default to allowing proactive messages if check fails
+
+    def _verify_task_completion(self, user_id: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
+        """Verify if all related tasks in a workflow are completed before sending proactive summary"""
+        completion_status = {
+            "all_completed": False,
+            "completed_tasks": [],
+            "pending_tasks": [],
+            "summary_ready": False
+        }
+        
+        try:
+            # Check for recent meeting scheduling
+            last_meeting = session_context.get("last_meeting", {})
+            meeting_completed = bool(last_meeting.get("title") and last_meeting.get("time"))
+            
+            # Check for recent email sending
+            last_email = session_context.get("last_email_status", {})
+            email_completed = bool(last_email.get("sent") and last_email.get("to"))
+            
+            # Check for pending actions that might be part of a workflow
+            from datetime import datetime, timedelta
+            recent_threshold = datetime.now() - timedelta(minutes=10)  # Tasks within last 10 minutes
+            
+            if meeting_completed:
+                meeting_time = last_meeting.get("timestamp", "")
+                try:
+                    if meeting_time:
+                        meeting_dt = datetime.strptime(meeting_time, "%Y-%m-%d %H:%M:%S")
+                        if meeting_dt > recent_threshold:
+                            completion_status["completed_tasks"].append("meeting_scheduled")
+                except:
+                    pass
+            
+            if email_completed:
+                email_time = last_email.get("timestamp", "")
+                try:
+                    if email_time:
+                        email_dt = datetime.strptime(email_time, "%Y-%m-%d %H:%M:%S")
+                        if email_dt > recent_threshold:
+                            completion_status["completed_tasks"].append("email_sent")
+                except:
+                    pass
+            
+            # Check if this looks like a chained workflow (meeting + email)
+            has_meeting = "meeting_scheduled" in completion_status["completed_tasks"]
+            has_email = "email_sent" in completion_status["completed_tasks"]
+            
+            # If we have both meeting and email, or just a standalone task, consider it complete
+            if has_meeting and has_email:
+                completion_status["all_completed"] = True
+                completion_status["summary_ready"] = True
+                logger.info(f"Chained workflow completed for user {user_id}: meeting + email")
+            elif has_meeting or has_email:
+                # Single task completed, but check if there might be a pending chained action
+                # This would require access to pending_actions from HybridNativeAI
+                # For now, we'll consider single tasks as complete after a brief delay
+                completion_status["all_completed"] = True
+                completion_status["summary_ready"] = True
+                logger.info(f"Single task completed for user {user_id}: {completion_status['completed_tasks']}")
+            
+        except Exception as e:
+            logger.error(f"Error verifying task completion: {e}")
+            # Default to not sending proactive message if verification fails
+            completion_status["summary_ready"] = False
+        
+        return completion_status
+
+    async def process_background_observations(self, observations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Process background observations and generate proactive opportunities"""
+        proactive_opportunities = []
+        
+        for observation in observations:
+            try:
+                user_id = observation.get("user_id")
+                session_context = observation.get("session_context", {})
+                
+                # First, verify if all related tasks are completed before considering proactive engagement
+                completion_status = self._verify_task_completion(user_id, session_context)
+                
+                # Only proceed with proactive messaging if tasks are complete or it's not a task-completion summary
+                observation_type = observation.get("type", "general")
+                
+                if observation_type == "task_completion_summary":
+                    if not completion_status["summary_ready"]:
+                        logger.info(f"Skipping proactive summary for user {user_id} - tasks not fully completed: {completion_status}")
+                        continue
+                    else:
+                        logger.info(f"Task completion verified for user {user_id} - proceeding with proactive summary")
+                
+                # Use LLM to analyze if this observation warrants proactive action
+                analysis_prompt = f"""
+    Analyze this observation for proactive opportunities:
+    {observation}
+    
+    Task completion status: {completion_status}
+
+    Should Native IQ proactively engage the user about this? Consider:
+    1. Strategic value to the user
+    2. Urgency level
+    3. Early win potential
+    4. Trust-building opportunity
+    5. Whether all related tasks are actually completed (don't send completion summaries for incomplete workflows)
+
+    Respond with JSON:
+    {{
+        "should_engage": true/false,
+        "reason": "why or why not",
+        "priority": "high/medium/low",
+        "strategic_value": "what value this provides"
+    }}"""
+
+                messages = [HumanMessage(content=analysis_prompt)]
+                response = await self.openai.ainvoke(messages)
+                
+                import json
+                analysis = json.loads(response.content)
+                
+                if analysis.get("should_engage"):
+                    # Generate the actual proactive message
+                    user_context = {
+                        "user_id": user_id, 
+                        "context_type": "background_observation",
+                        "completion_status": completion_status,
+                        "session_context": session_context
+                    }
+                    proactive_message = await self.generate_llm_strategic_message(observation, user_context)
+                    proactive_opportunities.append(proactive_message)
+                    
+            except Exception as e:
+                logger.error(f"Background observation processing error: {e}")
+                continue
+        
+        return proactive_opportunities
 
 # Scheduler for proactive communications
 class ProactiveScheduler:
