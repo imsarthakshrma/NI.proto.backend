@@ -1,5 +1,5 @@
 """
-Full Integration Test for Native AI System
+Full Integration Test for Native IQ System
 Tests Observer → Analyzer → Calendar Tool Integration
 """
 
@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Native AI imports
+# Native IQ imports
 from src.domains.agents.observer.ob_agent import ObserverAgent
 from src.domains.agents.analyzer.analyzer_agent import AnalyzerAgent
 from src.domains.agents.decision.decision_agent import DecisionAgent
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class NativeIntegrationTest:
-    """Complete Native AI system integration test"""
+    """Complete Native IQ system integration test"""
     
     def __init__(self):
         self.observer_agent = None
@@ -87,7 +87,7 @@ class NativeIntegrationTest:
     async def setup_agents(self):
         """Initialize all agents"""
         try:
-            print("🤖 Initializing Native AI Agents...")
+            print("🤖 Initializing Native IQ Agents...")
             
             # Initialize Observer Agent
             self.observer_agent = ObserverAgent(agent_id="integration_observer_001")
@@ -272,11 +272,11 @@ class NativeIntegrationTest:
             
             try:
                 schedule_result = await schedule_meeting.ainvoke({
-                    "title": "Native AI Integration Test Meeting",
+                    "title": "Native IQ Integration Test Meeting",
                     "start_time": meeting_time.isoformat(),
                     "duration_minutes": 60,
                     "attendees": ["test@example.com"],
-                    "description": "Automated test meeting created by Native AI",
+                    "description": "Automated test meeting created by Native IQ",
                     "location": "Meeting Room B"
                 })
                 print(f"    Result: {schedule_result}")
@@ -373,7 +373,7 @@ class NativeIntegrationTest:
     async def generate_test_report(self):
         """Generate comprehensive test report"""
         print("\n" + "="*60)
-        print("📋 Native AI INTEGRATION TEST REPORT")
+        print("📋 Native IQ INTEGRATION TEST REPORT")
         print("="*60)
         
         # Calculate success rate
@@ -411,7 +411,7 @@ class NativeIntegrationTest:
         
         print("🎯 Prototype Readiness:")
         if self.test_results["success"]:
-            print("  ✅ Native AI prototype is ready for demo!")
+            print("  ✅ Native IQ prototype is ready for demo!")
             print("  ✅ Observer → Analyzer → Calendar workflow functional")
             print("  ✅ Meeting automation capabilities demonstrated")
         else:
@@ -430,8 +430,8 @@ class NativeIntegrationTest:
 
 
 async def run_full_integration_test():
-    """Run the complete Native AI integration test"""
-    print("🚀 Starting Native AI Full Integration Test")
+    """Run the complete Native IQ integration test"""
+    print("🚀 Starting Native IQ Full Integration Test")
     print("="*60)
     
     test_suite = NativeIntegrationTest()
@@ -477,8 +477,8 @@ if __name__ == "__main__":
     success = asyncio.run(run_full_integration_test())
     
     if success:
-        print("\n🎉 Native AI Integration Test: SUCCESS!")
+        print("\n🎉 Native IQ Integration Test: SUCCESS!")
         print("Ready for Thursday demo! 🚀")
     else:
-        print("\n⚠️ Native AI Integration Test: NEEDS ATTENTION")
+        print("\n⚠️ Native IQ Integration Test: NEEDS ATTENTION")
         print("Review failed components before demo.")

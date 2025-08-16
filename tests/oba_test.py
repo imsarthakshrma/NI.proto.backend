@@ -432,7 +432,7 @@ async def test_environment_setup():
 
 async def main():
     """Main test runner"""
-    print("DELA AI - Observer Agent Comprehensive Testing")
+    print("Native IQ - Observer Agent Comprehensive Testing")
     print("=" * 60)
     print(f"Started at: {datetime.now()}")
     print()

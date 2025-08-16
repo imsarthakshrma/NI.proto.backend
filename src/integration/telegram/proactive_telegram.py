@@ -19,7 +19,7 @@ class ProactiveTelegramBot:
         
     async def start_proactive_mode(self):
         """Start proactive communication mode"""
-        logger.info("🚀 Starting Native AI Proactive Mode")
+        logger.info("🚀 Starting Native IQ Proactive Mode")
         
         # Start the scheduler in background
         asyncio.create_task(self.scheduler.start())
@@ -29,10 +29,10 @@ class ProactiveTelegramBot:
         if admin_chat_id:
             await self.bot.send_message(
                 chat_id=admin_chat_id,
-                text="🚀 Native AI is now active and ready to help! I'll proactively assist with meetings, automations, and important tasks."
+                text="🚀 Native IQ is now active and ready to help! I'll proactively assist with meetings, automations, and important tasks."
             )
         
-        logger.info("✅ Native AI Proactive Mode started successfully")
+        logger.info("✅ Native IQ Proactive Mode started successfully")
     
     async def trigger_proactive_event(self, event_type: str, event_data: dict):
         """Manually trigger a proactive event (for testing/demo)"""
@@ -50,7 +50,7 @@ class ProactiveTelegramBot:
 
 # Production startup function
 async def start_native_proactive():
-    """Start Native AI in proactive mode for production"""
+    """Start Native IQ in proactive mode for production"""
     bot = ProactiveTelegramBot()
     await bot.start_proactive_mode()
     

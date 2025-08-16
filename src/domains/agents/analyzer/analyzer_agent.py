@@ -1,5 +1,5 @@
 """
-Analyzer Agent for DELA AI - Intelligence Analyzer
+Analyzer Agent for Native IQ - Intelligence Analyzer
 Processes Observer patterns into structured intelligence and provides insights for automation
 """
 
@@ -9,9 +9,11 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from collections import defaultdict
+from uuid import uuid4
 
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
-
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +41,17 @@ class BusinessInsight:
 
 class AnalyzerAgent(BaseAgent):
     """
-    Analyzer Agent - Processes Observer data into structured intelligence and provides insights for automation
+    LLM-Powered Analyzer Agent - Processes Observer data into structured intelligence and provides insights for automation
     """
 
     def __init__(self, agent_id: str = "analyzer_001"):
         super().__init__(agent_id, "analyzer", temperature=0.2)
+
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.3,
+            max_tokens=2000
+        )
 
         self.automation_opportunities: Dict[str, AutomationOpportunity] = {}
         self.business_insights: Dict[str, BusinessInsight] = {}
@@ -67,7 +75,7 @@ class AnalyzerAgent(BaseAgent):
             )
         ]
 
-        logger.info(f"Analyzer Agent initialized: {self.agent_id}")
+        logger.info(f"LLM-Powered Analyzer Agent initialized: {self.agent_id}")
 
     async def perceive(self, messages: List[Any], context: Dict[str, Any]) -> List[Belief]:
         """Perceive Observer data and patterns"""
@@ -205,56 +213,193 @@ class AnalyzerAgent(BaseAgent):
             return None
 
     async def _analyze_automation_opportunities(self, patterns: Dict[str, Any]) -> Optional[Belief]:
-        """Identify automation opportunities"""
+        """LLM-powered automation opportunity analysis"""
         try:
-            opportunities = []
-            
-            for pattern in patterns.values():
-                # print("DEBUG pattern:", pattern, getattr(pattern, 'pattern_type', None), getattr(pattern, 'frequency', None), getattr(pattern, 'confidence', None))
-                if pattern.frequency >= self.min_pattern_frequency and pattern.confidence >= self.min_confidence_threshold:
-                    # print(f"DEBUG: Pattern {pattern.pattern_type} PASSED thresholds (freq: {pattern.frequency} >= {self.min_pattern_frequency}, conf: {pattern.confidence} >= {self.min_confidence_threshold})")
-                    
-                    if pattern.pattern_type.startswith("comm_"):
-                        opportunity = AutomationOpportunity(
-                            opportunity_id=f"template_{len(self.automation_opportunities)}",
-                            opportunity_type="template_response",
-                            description=f"Automate {pattern.pattern_type} responses",
-                            confidence=pattern.confidence,
-                            frequency=pattern.frequency,
-                            potential_time_saved=5,
-                            complexity="low"
-                        )
-                        opportunities.append(opportunity)
-                        self.automation_opportunities[opportunity.opportunity_id] = opportunity
-                        # print(f"DEBUG: Created comm opportunity {opportunity.opportunity_id}")
-                    
-                    if "meeting" in pattern.pattern_type or "schedule" in pattern.pattern_type:
-                        opportunity = AutomationOpportunity(
-                            opportunity_id=f"meeting_{len(self.automation_opportunities)}",
-                            opportunity_type="meeting_scheduling",
-                            description=f"Automate meeting scheduling",
-                            confidence=pattern.confidence,
-                            frequency=pattern.frequency,
-                            potential_time_saved=15,
-                            complexity="medium"
-                        )
-                        opportunities.append(opportunity)
-                        self.automation_opportunities[opportunity.opportunity_id] = opportunity
-                        # print(f"DEBUG: Created meeting opportunity {opportunity.opportunity_id}")
-                # else:
-                    # print(f"DEBUG: Pattern {pattern.pattern_type} FAILED thresholds (freq: {pattern.frequency} >= {self.min_pattern_frequency}? {pattern.frequency >= self.min_pattern_frequency}, conf: {pattern.confidence} >= {self.min_confidence_threshold}? {pattern.confidence >= self.min_confidence_threshold})")
-            
-            # print(f"DEBUG: Total opportunities created: {len(opportunities)}, stored: {len(self.automation_opportunities)}")
-            return Belief(
-                id=f"automation_opportunities_{datetime.now().timestamp()}",
-                type=BeliefType.KNOWLEDGE,
-                content={"opportunities_found": len(opportunities), "opportunities": opportunities},
-                confidence=0.8,
-                source="analyzer_agent"
+            if not patterns:
+                return None
+
+            # 1) Filter patterns using thresholds to reduce noise
+            filtered_patterns = {
+                pid: p
+                for pid, p in patterns.items()
+                if getattr(p, "frequency", 0) >= self.min_pattern_frequency
+                and getattr(p, "confidence", 0.0) >= self.min_confidence_threshold
+            }
+            if not filtered_patterns:
+                logger.info("No patterns passed thresholds; skipping LLM analysis.")
+                return None
+
+            # 2) Prepare summarized, stable, ID-inclusive prompt content
+            patterns_summary = self._prepare_patterns_for_llm(filtered_patterns)
+
+            # 3) Instruct the LLM to return strict JSON with provenance
+            system_prompt = (
+                "You are an expert business automation analyst. "
+                "Return ONLY valid JSON (no extra text) representing a list of 1-3 automation opportunities. "
+                "Each item MUST include keys: "
+                "opportunity_type (str), description (str), confidence (float 0-1), "
+                "frequency (int), potential_time_saved (int), complexity (low|medium|high), "
+                "trigger_conditions (str or list), source_pattern_ids (list[str])."
             )
-            
+            user_prompt = (
+                "Analyze these user behavior patterns and identify the top 3 most valuable automation opportunities. "
+                "Always reference pattern IDs in source_pattern_ids.\n\n"
+                f"{patterns_summary}"
+            )
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
+            ]
+
+            # 4) Invoke LLM
+            response = await self.llm.ainvoke(messages)
+            raw = response.content
+
+            # 5) Parse JSON; fallback to heuristic text parser if needed
+            try:
+                import json
+                parsed = json.loads(raw)
+            except Exception:
+                logger.warning("LLM response not valid JSON; using fallback text parser")
+                parsed = raw  # will be handled by fallback
+
+            # 6) Build domain objects
+            opportunities = self._parse_automation_opportunities(parsed, filtered_patterns)
+
+            # 7) Persist
+            for opp in opportunities:
+                self.automation_opportunities[opp.opportunity_id] = opp
+
+            # 8) Return belief with rich content
+            return Belief(
+                id=f"automation_analysis_{datetime.now().timestamp()}",
+                type=BeliefType.KNOWLEDGE,
+                content={
+                    "llm_raw": raw,
+                    "opportunities_found": len(opportunities),
+                    "opportunities": [
+                        {
+                            "id": opp.opportunity_id,
+                            "type": opp.opportunity_type,
+                            "description": opp.description,
+                            "confidence": opp.confidence,
+                            "frequency": opp.frequency,
+                            "time_saved": opp.potential_time_saved,
+                            "complexity": opp.complexity,
+                            "trigger_conditions": opp.trigger_conditions,
+                            "source_pattern_ids": opp.source_pattern_ids,
+                        }
+                        for opp in opportunities
+                    ],
+                },
+                confidence=0.9,
+                source="llm_analyzer_agent",
+            )
+
+        except Exception:
+            logger.exception("Error in LLM automation analysis")
+            return None
+    
+    def _prepare_patterns_for_llm(self, patterns: Dict[str, Any]) -> str:
+        """Prepare patterns data in a format suitable for LLM analysis"""
+        try:
+            patterns_text = "USER BEHAVIOR PATTERNS:\n\n"
+            for pattern_id, pattern in patterns.items():
+                patterns_text += f"Pattern ID: {pattern_id}\n"
+                patterns_text += f"Type: {pattern.pattern_type}\n"
+                patterns_text += f"Description: {pattern.description}\n"
+                patterns_text += f"Frequency: {pattern.frequency} times\n"
+                patterns_text += f"Confidence: {pattern.confidence:.2f}\n"
+                patterns_text += f"Context: {getattr(pattern, 'context', 'N/A')}\n"
+                examples = getattr(pattern, 'examples', 'N/A')
+                examples_str = examples if isinstance(examples, str) else str(examples)
+                patterns_text += f"Examples: {examples_str[:200]}...\n"
+                patterns_text += "---\n"
+            return patterns_text
         except Exception as e:
-            logger.error(f"Error analyzing automation opportunities: {e}")
+            logger.error(f"Error preparing patterns for LLM: {e}")
+            return "No patterns available for analysis."
+
+    def _parse_automation_opportunities_from_text(self, llm_response: str, patterns: Dict[str, Any]) -> List[AutomationOpportunity]:
+        """Heuristic parsing for non-JSON responses (best-effort)."""
+        opportunities: List[AutomationOpportunity] = []
+        try:
+            import re
+
+            lines = llm_response.splitlines()
+            current: Dict[str, Any] = {}
+
+            def flush():
+                if current:
+                    opp = self._create_opportunity_from_dict(current)
+                    if opp:
+                        opportunities.append(opp)
+
+            for raw in lines:
+                line = raw.strip()
+                if not line:
+                    continue
+
+                # Start of a new opportunity block
+                if re.search(r"\b(opportunity|automation)\b", line, re.I) and ":" in line:
+                    flush()
+                    current = {"description": line}
+
+                elif "type:" in line.lower():
+                    current["type"] = line.split(":", 1)[1].strip()
+
+                elif "confidence:" in line.lower():
+                    try:
+                        current["confidence"] = float(line.split(":", 1)[1].strip())
+                    except Exception:
+                        current["confidence"] = 0.7
+
+                elif "frequency:" in line.lower():
+                    nums = re.findall(r"\d+", line)
+                    if nums:
+                        current["frequency"] = int(nums[0])
+
+                elif "time saved:" in line.lower() or "minutes" in line.lower():
+                    nums = re.findall(r"\d+", line)
+                    if nums:
+                        current["time_saved"] = int(nums[0])
+
+                elif "complexity:" in line.lower():
+                    current["complexity"] = line.split(":", 1)[1].strip().lower()
+
+                elif "trigger" in line.lower():
+                    current["trigger_conditions"] = line.split(":", 1)[-1].strip()
+
+                elif "pattern" in line.lower() and "id" in line.lower():
+                    # Try to collect IDs loosely
+                    ids = re.findall(r"[A-Za-z0-9_\-]+", line)
+                    # Heuristic: keep tokens that exist in patterns
+                    current["source_pattern_ids"] = [tok for tok in ids if tok in patterns]
+
+            flush()
+
+        except Exception:
+            logger.exception("Error parsing automation opportunities (fallback text)")
+
+        return opportunities
+
+    def _create_opportunity_from_dict(self, opp_dict: Dict[str, Any]) -> Optional[AutomationOpportunity]:
+        """Create AutomationOpportunity from parsed dictionary"""
+        try:
+            return AutomationOpportunity(
+                opportunity_id=f"auto_opp_{uuid4().hex}",
+                opportunity_type=str(opp_dict.get("type", "general_automation")),
+                description=str(opp_dict.get("description", "Automation opportunity identified")),
+                confidence=float(opp_dict.get("confidence", 0.7)),
+                frequency=int(opp_dict.get("frequency", 3)),
+                potential_time_saved=int(opp_dict.get("time_saved", 10)),
+                complexity=str(opp_dict.get("complexity", "medium")).lower(),
+                trigger_conditions=opp_dict.get("trigger_conditions"),
+                source_pattern_ids=list(opp_dict.get("source_pattern_ids", [])),
+            )
+        except Exception:
+            logger.exception("Error creating opportunity")
             return None
 
     async def _analyze_relationships(self, relationships: Dict[str, Any]) -> Optional[Belief]:
@@ -318,7 +463,7 @@ class AnalyzerAgent(BaseAgent):
                     data_points=belief.content.get('total_patterns', 0)
                 )
                 self.business_insights[insight.insight_id] = insight
-                print(f"✅ Created business insight: {insight.insight_id}")
+                print(f"Created business insight: {insight.insight_id}")
         
         return analysis_results
     
@@ -358,7 +503,7 @@ class AnalyzerAgent(BaseAgent):
                         )
                         self.automation_opportunities[opportunity.opportunity_id] = opportunity
                         opportunities_created += 1
-                        print(f"✅ Created automation opportunity: {opportunity.opportunity_id}")
+                        print(f"Created automation opportunity: {opportunity.opportunity_id}")
                     
                     if hasattr(pattern, 'pattern_type') and ("meeting" in pattern.pattern_type or "schedule" in pattern.pattern_type):
                         opportunity = AutomationOpportunity(
@@ -372,7 +517,7 @@ class AnalyzerAgent(BaseAgent):
                         )
                         self.automation_opportunities[opportunity.opportunity_id] = opportunity
                         opportunities_created += 1
-                        print(f"✅ Created automation opportunity: {opportunity.opportunity_id}")
+                        print(f"Created automation opportunity: {opportunity.opportunity_id}")
         
         return {
             "opportunities_identified": len(self.automation_opportunities),
