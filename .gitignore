@@ -1,6 +1,4 @@
 
-
-
 /notes
 
 /venv
@@ -15,3 +13,17 @@ token.json
 
 calendar_token.json
 drive_token.json
+*_token.json
+
+
+*.egg-info/
+*.egg-info
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+
+.pytest_cache
+
+conversation_memory.json

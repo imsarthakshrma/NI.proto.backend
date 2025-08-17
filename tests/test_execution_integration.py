@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Test script to verify Execution Agent integration with Google Drive and email tools
 """
@@ -9,7 +8,8 @@ import sys
 import os
 
 # Add the src directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(repo_root, 'src'))
 
 from src.domains.agents.execution.execution_agent import ExecutionAgent
 from src.core.base_agent import Intention

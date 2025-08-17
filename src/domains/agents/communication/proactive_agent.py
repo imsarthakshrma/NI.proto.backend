@@ -3,14 +3,13 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any
 from dataclasses import dataclass, field
-# import openai
-# from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.core.base_agent import BaseAgent, Belief, Desire, Intention, BeliefType
 from telegram import Update
+from telegram.constants import ChatAction
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -36,7 +35,7 @@ class ProactiveCommunicationAgent(BaseAgent):
         self.openai = ChatOpenAI(
             model="gpt-4o",
             temperature=0.7,
-            api_key=os.getenv("OPENAI_API_KEY")
+            openai_api_key=os.getenv("OPENAI_API_KEY")
         )
         
         # Professional PA/Co-founder personality prompts
