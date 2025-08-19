@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DynamoDB Service - Persistent storage migration for Native IQ
 Handles long-term storage of conversations, memories, and user data

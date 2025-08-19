@@ -26,8 +26,10 @@ for p in [str(SRC), str(ROOT)]:
 # Import your existing bot system
 from integration.telegram.hybrid_native_bot import HybridNativeAI
 
-# Import memory API routes
+# Import API routes
 from api.memory_api import router as memory_router
+from api.auth_api import router as auth_router
+from api.group_chat_api import router as group_chat_router
 
 app = FastAPI(
     title="Native IQ API",
@@ -35,8 +37,10 @@ app = FastAPI(
     version="0.1.0-beta"
 )
 
-# Include memory API routes
+# Include API routes
 app.include_router(memory_router)
+app.include_router(auth_router)
+app.include_router(group_chat_router)
 
 # CORS for frontend
 app.add_middleware(

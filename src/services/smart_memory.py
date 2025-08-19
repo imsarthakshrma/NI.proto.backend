@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Smart Memory System - ChromaDB + Semantic Search + Relationship Graphs
 Advanced memory system for Native IQ with vector embeddings and graph relationships

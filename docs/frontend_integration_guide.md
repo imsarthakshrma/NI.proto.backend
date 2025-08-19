@@ -6,14 +6,34 @@ This guide shows how to integrate Google Drive, Calendar, and Gmail OAuth from y
 
 ## 🚀 **Quick Setup**
 
-### **1. Add Integration API to Main App**
+### **1. Generate API Key**
+```javascript
+// First, generate an API key for your frontend app
+const keyResponse = await fetch('/api/auth/generate-key', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_id: 'your_user_id',
+    app_name: 'Native IQ Frontend',
+    permissions: ['chat', 'memory', 'integrations', 'dashboard'],
+    expires_in_days: 30
+  })
+});
+
+const { api_key } = await keyResponse.json();
+// Store securely: niq_a1b2c3d4_f5e6d7c8
+```
+
+### **2. Add Integration API to Main App**
 ```python
 # In src/api/main.py
 from api.integrations_api import router as integrations_router
+from api.auth_api import router as auth_router
 app.include_router(integrations_router)
+app.include_router(auth_router)
 ```
 
-### **2. Frontend OAuth Flow**
+### **3. Frontend OAuth Flow with Authentication**
 
 #### **Step 1: Show Available Services**
 ```javascript
@@ -27,12 +47,15 @@ data.services.forEach(service => {
 });
 ```
 
-#### **Step 2: Initiate OAuth**
+#### **Step 2: Initiate OAuth with API Key**
 ```javascript
-async function connectService(serviceName, userId) {
+async function connectService(serviceName, userId, apiKey) {
   const response = await fetch(`/api/integrations/connect/${serviceName}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`  // API key authentication
+    },
     body: JSON.stringify({
       user_id: userId,
       frontend_url: window.location.origin
@@ -46,7 +69,7 @@ async function connectService(serviceName, userId) {
 }
 ```
 
-#### **Step 3: Handle OAuth Callback**
+#### **Step 3: Handle OAuth Callback with Authentication**
 ```javascript
 // Create route: /auth/callback
 // This page handles the OAuth return from Google
@@ -55,12 +78,17 @@ const urlParams = new URLSearchParams(window.location.search);
 const code = urlParams.get('code');
 const state = urlParams.get('state');
 const error = urlParams.get('error');
+const apiKey = localStorage.getItem('niq_api_key');
 
 if (error) {
   showError(`OAuth failed: ${error}`);
 } else if (code && state) {
   // Backend will handle the token exchange
-  const response = await fetch(`/api/integrations/callback?code=${code}&state=${state}`);
+  const response = await fetch(`/api/integrations/callback?code=${code}&state=${state}`, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  });
   const result = await response.json();
   
   if (result.success) {
@@ -75,8 +103,12 @@ if (error) {
 
 ### **Integration Status Dashboard**
 ```javascript
-async function loadIntegrationStatus(userId) {
-  const response = await fetch(`/api/integrations/status/${userId}`);
+async function loadIntegrationStatus(userId, apiKey) {
+  const response = await fetch(`/api/integrations/status/${userId}`, {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  });
   const data = await response.json();
   
   return data.integrations.map(integration => ({
@@ -153,16 +185,23 @@ function createServiceButton(service, connected) {
 
 ## 🔧 **Complete Integration Functions**
 
-### **Connection Management**
+### **Connection Management with API Key**
 ```javascript
 class IntegrationManager {
-  constructor(userId, apiBaseUrl) {
+  constructor(userId, apiBaseUrl, apiKey) {
     this.userId = userId;
     this.apiUrl = apiBaseUrl;
+    this.apiKey = apiKey;
+    this.headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    };
   }
   
   async getStatus() {
-    const response = await fetch(`${this.apiUrl}/integrations/status/${this.userId}`);
+    const response = await fetch(`${this.apiUrl}/integrations/status/${this.userId}`, {
+      headers: { 'Authorization': `Bearer ${this.apiKey}` }
+    });
     return response.json();
   }
   
@@ -170,7 +209,7 @@ class IntegrationManager {
     try {
       const response = await fetch(`${this.apiUrl}/integrations/connect/${service}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.headers,
         body: JSON.stringify({
           user_id: this.userId,
           frontend_url: window.location.origin
@@ -194,14 +233,20 @@ class IntegrationManager {
   async disconnectService(service) {
     const response = await fetch(
       `${this.apiUrl}/integrations/disconnect/${this.userId}/${service}`,
-      { method: 'DELETE' }
+      { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      }
     );
     return response.json();
   }
   
   async testConnection(service) {
     const response = await fetch(
-      `${this.apiUrl}/integrations/test/${this.userId}/${service}`
+      `${this.apiUrl}/integrations/test/${this.userId}/${service}`,
+      {
+        headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      }
     );
     return response.json();
   }
@@ -209,7 +254,10 @@ class IntegrationManager {
   async refreshCredentials(service) {
     const response = await fetch(
       `${this.apiUrl}/integrations/refresh/${this.userId}/${service}`,
-      { method: 'POST' }
+      { 
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.apiKey}` }
+      }
     );
     return response.json();
   }
