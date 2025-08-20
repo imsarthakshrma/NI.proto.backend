@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Native IQ Application - Local Development
+  native-iq:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=local
+    env_file:
+      - environments/local.env
+      - ../.env
+    depends_on:
+      - redis
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - native-iq-local
+
+  # Redis Cache - Local
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_local_data:/data
+    restart: unless-stopped
+    networks:
+      - native-iq-local
+
+  # Local DynamoDB (for testing)
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8001:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    networks:
+      - native-iq-local
+
+volumes:
+  redis_local_data:
+
+networks:
+  native-iq-local:
+    driver: bridge

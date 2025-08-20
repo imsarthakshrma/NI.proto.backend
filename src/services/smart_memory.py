@@ -18,6 +18,11 @@ from chromadb.config import Settings
 import networkx as nx
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import boto3
+import redis
+from dotenv import load_dotenv
+
+load_dotenv()
 
 @dataclass
 class MemoryNode:
@@ -71,6 +76,11 @@ class SmartMemorySystem:
         self.memory_cache: Dict[str, Dict[str, MemoryNode]] = {}  # user_id -> {node_id: node}
         self.relationship_cache: Dict[str, List[Relationship]] = {}  # user_id -> relationships
         
+        # Initialize Redis and DynamoDB for session persistence
+        self.redis_client = None
+        self.dynamodb = None
+        self._init_persistence()
+        
         # Load existing memories
         self._load_memories()
     
@@ -87,6 +97,30 @@ class SmartMemorySystem:
                     metadata={"description": f"Memory collection for {memory_type} data"}
                 )
             self.collections[memory_type] = collection
+    
+    def _init_persistence(self):
+        """Initialize Redis and DynamoDB for session persistence"""
+        try:
+            # Redis for fast caching
+            self.redis_client = redis.Redis(
+                host=os.getenv('REDIS_HOST', 'localhost'),
+                port=int(os.getenv('REDIS_PORT', 6379)),
+                password=os.getenv('REDIS_PASSWORD') if os.getenv('REDIS_PASSWORD') != 'your_redis_password' else None,
+                db=int(os.getenv('REDIS_DB', 0)),
+                decode_responses=True
+            )
+            
+            # DynamoDB for persistent storage
+            self.dynamodb = boto3.resource(
+                'dynamodb',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_REGION', 'us-east-1')
+            )
+            self.table = self.dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME', 'native_iq_sessions'))
+            
+        except Exception as e:
+            print(f"Warning: Failed to initialize persistence layer: {e}")
     
     def _load_graph(self):
         """Load relationship graph from file"""
@@ -490,6 +524,83 @@ class SmartMemorySystem:
         
         self._save_memories()
         self._save_graph()
+    
+    async def store_session_context(self, user_id: str, session_data: Dict[str, Any], ttl: int = 3600):
+        """Store session context with Redis caching and DynamoDB persistence"""
+        if not self.redis_client or not self.dynamodb:
+            return False
+            
+        try:
+            session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            
+            # Cache in Redis for fast access
+            redis_key = f"native_iq:sessions:{user_id}"
+            await asyncio.to_thread(
+                self.redis_client.setex,
+                redis_key,
+                ttl,
+                json.dumps(session_data)
+            )
+            
+            # Persist in DynamoDB
+            await asyncio.to_thread(
+                self.table.put_item,
+                Item={
+                    'user_id': user_id,
+                    'session_id': session_id,
+                    'session_data': session_data,
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat(),
+                    'ttl': int((datetime.now() + timedelta(days=30)).timestamp())
+                }
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Failed to store session context: {e}")
+            return False
+    
+    async def get_session_context(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve session context from Redis cache or DynamoDB"""
+        if not self.redis_client or not self.dynamodb:
+            return None
+            
+        try:
+            # Try Redis first (fast)
+            redis_key = f"native_iq:sessions:{user_id}"
+            cached_data = await asyncio.to_thread(self.redis_client.get, redis_key)
+            
+            if cached_data:
+                return json.loads(cached_data)
+            
+            # Fallback to DynamoDB
+            response = await asyncio.to_thread(
+                self.table.query,
+                KeyConditionExpression='user_id = :uid',
+                ExpressionAttributeValues={':uid': user_id},
+                ScanIndexForward=False,  # Latest first
+                Limit=1
+            )
+            
+            if response['Items']:
+                session_data = response['Items'][0]['session_data']
+                
+                # Cache back to Redis
+                await asyncio.to_thread(
+                    self.redis_client.setex,
+                    redis_key,
+                    3600,
+                    json.dumps(session_data)
+                )
+                
+                return session_data
+            
+            return None
+            
+        except Exception as e:
+            print(f"Failed to get session context: {e}")
+            return None
 
 # Global instance
 smart_memory = SmartMemorySystem()

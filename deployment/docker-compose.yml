@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # Native IQ Application
+  native-iq:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+    env_file:
+      - ../.env
+    depends_on:
+      - redis
+    volumes:
+      - ../data:/app/data
+    restart: unless-stopped
+    networks:
+      - native-iq-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - native-iq-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - native-iq
+    restart: unless-stopped
+    networks:
+      - native-iq-network
+
+volumes:
+  redis_data:
+
+networks:
+  native-iq-network:
+    driver: bridge

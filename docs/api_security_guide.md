@@ -40,7 +40,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://your-frontend-domain.com",
-        "https://app.nativeiq.com"
+        "https://app.nativeiq.tech"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
@@ -333,7 +333,7 @@ ENCRYPTION_KEY=your_32_byte_key
 REDIS_PASSWORD=secure_redis_password
 
 # CORS Origins
-ALLOWED_ORIGINS=https://app.nativeiq.com,https://dashboard.nativeiq.com
+ALLOWED_ORIGINS=https://app.nativeiq.tech,https://dashboard.nativeiq.tech
 ```
 
 ### **Security Headers**
@@ -347,7 +347,7 @@ app.add_middleware(HTTPSRedirectMiddleware)
 # Restrict host headers
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["app.nativeiq.com", "api.nativeiq.com"]
+    allowed_hosts=["app.nativeiq.tech", "api.nativeiq.tech"]
 )
 
 # Security headers
