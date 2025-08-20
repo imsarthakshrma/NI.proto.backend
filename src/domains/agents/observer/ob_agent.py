@@ -1,5 +1,5 @@
 """
-Observer Agent for DELA AI - Intelligence Collector
+Observer Agent for Native IQ - Intelligence Collector
 Learns complete communication patterns for automation
 """
 
@@ -45,7 +45,7 @@ class Contact:
 
 class ObserverAgent(BaseAgent):
     """
-    Observer Agent for DELA AI - Intelligence Collector
+    Observer Agent for Native IQ - Intelligence Collector
 
     Capabilities:
     1. Full content analysis of communications

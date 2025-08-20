@@ -1,5 +1,5 @@
 """
-Main testing file for DELA AI Base Agent
+Main testing file for Native IQ Base Agent
 Simple test harness to validate base_agent.py functionality
 """
 
@@ -156,7 +156,7 @@ def test_environment():
 
 async def main():
     """Main test runner"""
-    print("DELA AI - Base Agent Testing")
+    print("Native IQ - Base Agent Testing")
     print("=" * 40)
     print(f"Started at: {datetime.now()}")
     print()

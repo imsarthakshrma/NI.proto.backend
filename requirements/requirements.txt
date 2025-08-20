@@ -2,6 +2,7 @@
 langchain
 langchain-core
 langchain-openai
+langchain-anthropic
 langgraph
 
 # OpenAI API
@@ -87,3 +88,14 @@ pytz
 google-api-python-client
 google-auth-httplib2 
 google-auth-oauthlib
+
+# Scheduling
+apscheduler>=3.10.0
+celery>=5.3.0
+
+# Multi Platform
+slack-sdk
+microsoft-graph-api
+
+websockets
+socketio

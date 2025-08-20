@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Native IQ Application - Staging
+  native-iq:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=staging
+    env_file:
+      - environments/staging.env
+      - ../.env.staging
+    depends_on:
+      - redis
+    volumes:
+      - staging_data:/app/data
+      - staging_logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - native-iq-staging
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.native-iq-staging.rule=Host(`staging-api.nativeiq.tech`)"
+      - "traefik.http.routers.native-iq-staging.tls=true"
+      - "traefik.http.routers.native-iq-staging.tls.certresolver=letsencrypt"
+
+  # Redis Cache - Staging
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - staging_redis_data:/data
+    restart: unless-stopped
+    networks:
+      - native-iq-staging
+
+  # Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.10
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=admin@nativeiq.tech
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - staging_letsencrypt:/letsencrypt
+    networks:
+      - native-iq-staging
+
+volumes:
+  staging_data:
+  staging_logs:
+  staging_redis_data:
+  staging_letsencrypt:
+
+networks:
+  native-iq-staging:
+    driver: bridge

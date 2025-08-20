@@ -6,7 +6,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from telegram import Bot
-from src.integration.telegram.telegram_bot import DelaBot
+from src.integration.telegram.telegram_bot import NativeIQBot
 
 load_dotenv()
 
@@ -26,11 +26,11 @@ async def test_full_telegram_integration():
     print(f"✅ Telegram API reachable. Bot username: @{me.username}")
 
     # ✅ 2. Test DELA Bot initialization
-    dela_bot = DelaBot()
-    print(f"✅ DELA Bot created. Observer Agent ID: {dela_bot.observer_agent.agent_id}")
+    native_iq_bot = NativeIQBot()
+    print(f"✅ DELA Bot created. Observer Agent ID: {native_iq_bot.observer_agent.agent_id}")
 
     # ✅ 3. Test Observer Agent logic
-    result = await dela_bot.observer_agent.process(
+    result = await native_iq_bot.observer_agent.process(
         {"message": "Integration test message"},
         {"message_type": "telegram", "sender": "test_user"}
     )

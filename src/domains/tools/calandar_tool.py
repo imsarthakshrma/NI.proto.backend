@@ -1,5 +1,5 @@
 """
-Google Calendar Integration Tool for DELA AI
+Google Calendar Integration Tool for Native IQ
 Handles calendar operations and meeting scheduling
 """
 
@@ -102,7 +102,7 @@ class GoogleCalendarService:
     def _load_credentials(self) -> Optional[Credentials]:
         """Load Google Calendar credentials"""
         try:
-            token_path = os.getenv('GOOGLE_CALENDAR_TOKEN_PATH', 'token.json')
+            token_path = os.getenv('GOOGLE_CALENDAR_TOKEN_PATH', 'calendar_token.json')
             credentials_path = os.getenv('GOOGLE_CALENDAR_CREDENTIALS_PATH', 'credentials.json')
             
             creds = None
@@ -449,5 +449,5 @@ CALENDAR_TOOLS = [
 ]
 
 def get_calendar_tools():
-    """Get calendar tools."""
+    """Return the list of calendar tools."""
     return CALENDAR_TOOLS
